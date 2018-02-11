@@ -1,42 +1,52 @@
 "use strict";
 const recursive_readdir = require("recursive-readdir");
 const hasha = require("hasha");
+const path = require("path");
+require ("intl-pluralrules");
 
-async function doDirectory(path){
+async function doDirectory(dirpath){
     // list files
     // TODO: want a sum of fiile size here. 
     // TODO: I want a progress indicator
-    let files = await recursive_readdir(path);
+    let files = await recursive_readdir(dirpath);
 
     let hashes = [];
     for (const kv of files.entries()){
         let i = kv[0];
         let x = kv[1];
         hashes.push({
-            'filename': x,
+            'relpath': path.relative(dirpath, x),
             'sha512': await hasha.fromFile(x, {algorithm:"sha512"})
          });
     }
 
-    return hashes;
+    let dict = new Map();
+    let duplicates = new Set();
+    
+    for (const x of hashes){
+        let names = dict.get(x.sha512) || [];
+        if (names.length>0) {
+            duplicates.add(x.sha512);
+        }
+        names.push(x.relpath);
+        dict.set(x.sha512, names);
+    }
+
+    return { hashes, dict, duplicates };
 }
 
 function* join(left, ...right){
-    let key = "sha512";
-    function* dictGenerator (left){
-        for (const x of left){
-            yield [x[key], x];
-        }
-    }
 
-    let dict = new Map(dictGenerator(left));
     
     //FIXME consolidate more than one right
-    for (const list of right){
-        for (const y of list){
-            let x = dict.get(y[key]);
-            if (x) {
-             yield x;
+    for (const dir of right){
+        for (const kv of dir.dict.entries()){
+            let key = kv[0];
+            let right_relpaths = kv[1];
+            
+            let left_relpaths = left.dict.get(key);
+            if (left_relpaths){
+                yield {key, left: left_relpaths, right: right_relpaths}
             }
         }
     }
@@ -52,14 +62,25 @@ function* filter(iter, fn){
 
 async function main(){
     let directories = process.argv.slice(2);
-    let hashes = [];
-    for (const x of directories){
-        let hash = await doDirectory(x);
-        console.log(hash);
-        hashes.push(hash);
+    
+    let dirinfo = [];
+    for (const directory of directories){
+        const dir = await doDirectory(directory);
+        dirinfo.push( dir );
+        
+        if (dir.duplicates.size > 0){
+            console.log(`${dir.duplicates.size} duplicates in ${directory}:`, dir.duplicates);
+        } else {
+            console.log(`no duplicates in ${directory}.`)
+        }
     }
-
-    let joined = [... join(...hashes)];
-    console.log(joined);    
+    let joined = join(...dirinfo);
+    let filtered = filter(joined, x=> x.left[0]!=x.right[0]);
+    
+    let result = [... filtered];
+//    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
+    console.log(`${result.length} files with different paths:`, result);    
+    
+    // now filter joined with where two files are there
 }
 main();
