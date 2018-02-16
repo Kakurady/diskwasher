@@ -69,7 +69,15 @@ async function main(){
         dirinfo.push( dir );
         
         if (dir.duplicates.size > 0){
-            console.log(`${dir.duplicates.size} duplicates in ${directory}:`, dir.duplicates);
+            console.log(`${dir.duplicates.size} duplicates in ${directory}:`);
+            for (const dup of dir.duplicates){
+                let fnames = dir.dict.get(dup);
+                console.log(dup);
+                for (const name of fnames){
+                    console.log("\t",name);
+                }
+            }
+            console.log("");
         } else {
             console.log(`no duplicates in ${directory}.`)
         }
