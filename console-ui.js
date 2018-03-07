@@ -64,6 +64,8 @@ class ConsoleUI extends ThottledUpdater {
 
     doUpdate(){
 
+        // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
+
         let total = this.state.total;
         let totalMax = this.state.totalMax;
 

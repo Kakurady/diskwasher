@@ -5,55 +5,16 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
-async function doDirectory(dirpath, onProgress){
-    // step 1: list files under the directory.
-    // TODO: want a sum of fiile size here. 
-    // TODO: I want a progress indicator
-    let files = await recursive_readdir(dirpath);
-
-    // step 2: read each file and compute a sha512 digest.
-    let hashes = [];
-    for (const kv of files.entries()){
-        let i = kv[0];
-        let x = kv[1];
-        onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
-
-        hashes.push({
-            'relpath': path.relative(dirpath, x),
-            'sha512': await hasha.fromFile(x, {algorithm:"sha512"})
-         });
-    }
-
-    // build a dictionary of sha512 -> array of files with that digest.
-    // we can build a list of files with the same digest at the same time.
-    let dict = new Map();
-    let duplicates = new Set();
-    
-    for (const kv of hashes.entries()){
-        let i = kv[0];
-        let x = kv[1];
-
-        let names = dict.get(x.sha512) || [];
-        if (names.length>0) {
-            duplicates.add(x.sha512);
-        }
-        names.push(x.relpath);
-        dict.set(x.sha512, names);
-    }
-
-    return { root: dirpath, hashes, dict, duplicates };
-}
-
 function* join(left, ...right){
 
     
     //FIXME consolidate more than one right
     for (const dir of right){
-        for (const kv of dir.dict.entries()){
+        for (const kv of dir.digestIndex.entries()){
             let key = kv[0];
             let right_relpaths = kv[1];
             
-            let left_relpaths = left.dict.get(key);
+            let left_relpaths = left.digestIndex.get(key);
             if (left_relpaths){
                 yield {key, left: left_relpaths, right: right_relpaths}
             }
@@ -80,10 +41,10 @@ function findMisplacedFiles(dirInfos){
 
 function printDuplicates(dirInfo){
     // printing duplicates.
-    if (dirInfo.duplicates.size > 0){
-        console.log(`${dirInfo.duplicates.size} duplicates in ${dirInfo.root}:`);
-        for (const dup of dirInfo.duplicates){
-            let fnames = dirInfo.dict.get(dup);
+    if (dirInfo.dupsByDigest.size > 0){
+        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
+        for (const dup of dirInfo.dupsByDigest){
+            let fnames = dirInfo.digestIndex.get(dup);
             console.log(dup);
             for (const name of fnames){
                 console.log("\t",name);
@@ -107,6 +68,55 @@ async function main(){
     let dirInfos = [];
     for (const directoryPath of directoryPaths){
         // list files, digest files, build map of hash and list of duplicates
+        async function doDirectory(dirpath, onProgress){
+            // step 1: list files under the directory.
+            // TODO: I want a progress indicator while reading
+            // TODO: want file size for each file, so I can display a progress for large files. 
+            let filenames = await recursive_readdir(dirpath);
+        
+
+            let files = filenames.map(function (filename) {
+                return {
+                    'relpath': path.relative(dirpath, filename),
+                    'size': null,
+                    'mtime': null,
+                    'sha512': null
+                }
+                /*  TODO: rewrite object literal with class/instance,
+                 so when adding type annotations to functions for VS Code
+                 to pick up, I don't have to repeat myself. */
+            });
+
+            // step 2: read each file and compute a sha512 digest.
+            for (const kv of files.entries()){
+                let i = kv[0];
+                let file = kv[1];
+                // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
+                onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
+        
+                const fullpath = path.join(dirpath, file.relpath);
+                file.sha512 = await hasha.fromFile(fullpath, {algorithm:"sha512"});
+            }
+        
+            // build a dictionary of sha512 -> array of files with that digest.
+            // we can build a list of files with the same digest at the same time.
+            let digestIndex = new Map();
+            let dupsByDigest = new Set();
+            
+            for (const kv of files.entries()){
+                let i = kv[0];
+                let x = kv[1];
+        
+                let names = digestIndex.get(x.sha512) || [];
+                if (names.length>0) {
+                    dupsByDigest.add(x.sha512);
+                }
+                names.push(x.relpath);
+                digestIndex.set(x.sha512, names);
+            }
+        
+            return { root: dirpath, files, digestIndex, dupsByDigest };
+        }
         const dirInfo = await doDirectory(directoryPath, onProgress);
         dirInfos.push( dirInfo );
         
