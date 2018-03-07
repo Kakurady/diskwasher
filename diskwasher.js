@@ -69,6 +69,32 @@ function* filter(iter, fn){
     }
 }
 
+function findMisplacedFiles(dirInfos){
+    // find files in different folders, that have the same hash, but different file paths.
+    // (what was I thinking when I wrote this... )
+    let joined = join(...dirInfos);
+    let filtered = filter(joined, x=> x.left[0]!=x.right[0]);
+    
+    return [... filtered];
+}
+
+function printDuplicates(dirInfo){
+    // printing duplicates.
+    if (dirInfo.duplicates.size > 0){
+        console.log(`${dirInfo.duplicates.size} duplicates in ${dirInfo.root}:`);
+        for (const dup of dirInfo.duplicates){
+            let fnames = dirInfo.dict.get(dup);
+            console.log(dup);
+            for (const name of fnames){
+                console.log("\t",name);
+            }
+        }
+        console.log("");
+    } else {
+        console.log(`no duplicates in ${dirInfo.root}.`)
+    }
+}
+
 async function main(){
     let cui = new ConsoleUI();
 
@@ -76,39 +102,20 @@ async function main(){
         cui.onChange(obj);
     }
     
-
-    let directories = process.argv.slice(2);
+    let directoryPaths = process.argv.slice(2);
     
-    let dirinfo = [];
-    for (const directory of directories){
+    let dirInfos = [];
+    for (const directoryPath of directoryPaths){
         // list files, digest files, build map of hash and list of duplicates
-        const dir = await doDirectory(directory, onProgress);
-        dirinfo.push( dir );
+        const dirInfo = await doDirectory(directoryPath, onProgress);
+        dirInfos.push( dirInfo );
         
-        // printing duplicates.
-        if (dir.duplicates.size > 0){
-            console.log(`${dir.duplicates.size} duplicates in ${directory}:`);
-            for (const dup of dir.duplicates){
-                let fnames = dir.dict.get(dup);
-                console.log(dup);
-                for (const name of fnames){
-                    console.log("\t",name);
-                }
-            }
-            console.log("");
-        } else {
-            console.log(`no duplicates in ${directory}.`)
-        }
+        printDuplicates(dirInfo);
     }
 
-    // find files in different folders, that have the same hash, but different file paths.
-    // (what was I thinking when I wrote this... )
-    let joined = join(...dirinfo);
-    let filtered = filter(joined, x=> x.left[0]!=x.right[0]);
-    
-    let result = [... filtered];
+    let misplacedFiles = findMisplacedFiles(dirInfos);
 //    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    console.log(`${result.length} files with different paths:`, result);    
+    console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
 }
 main();
