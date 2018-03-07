@@ -3,8 +3,9 @@ const recursive_readdir = require("recursive-readdir");
 const hasha = require("hasha");
 const path = require("path");
 require ("intl-pluralrules");
+const ConsoleUI = require ("./console-ui");
 
-async function doDirectory(dirpath){
+async function doDirectory(dirpath, onProgress){
     // list files
     // TODO: want a sum of fiile size here. 
     // TODO: I want a progress indicator
@@ -14,6 +15,8 @@ async function doDirectory(dirpath){
     for (const kv of files.entries()){
         let i = kv[0];
         let x = kv[1];
+        onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
+
         hashes.push({
             'relpath': path.relative(dirpath, x),
             'sha512': await hasha.fromFile(x, {algorithm:"sha512"})
@@ -23,7 +26,10 @@ async function doDirectory(dirpath){
     let dict = new Map();
     let duplicates = new Set();
     
-    for (const x of hashes){
+    for (const kv of hashes.entries()){
+        let i = kv[0];
+        let x = kv[1];
+
         let names = dict.get(x.sha512) || [];
         if (names.length>0) {
             duplicates.add(x.sha512);
@@ -61,11 +67,18 @@ function* filter(iter, fn){
 }
 
 async function main(){
+    let cui = new ConsoleUI();
+
+    function onProgress(obj){
+        cui.onChange(obj);
+    }
+    
+
     let directories = process.argv.slice(2);
     
     let dirinfo = [];
     for (const directory of directories){
-        const dir = await doDirectory(directory);
+        const dir = await doDirectory(directory, onProgress);
         dirinfo.push( dir );
         
         if (dir.duplicates.size > 0){
