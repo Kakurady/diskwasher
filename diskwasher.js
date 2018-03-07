@@ -6,11 +6,12 @@ require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
 async function doDirectory(dirpath, onProgress){
-    // list files
+    // step 1: list files under the directory.
     // TODO: want a sum of fiile size here. 
     // TODO: I want a progress indicator
     let files = await recursive_readdir(dirpath);
 
+    // step 2: read each file and compute a sha512 digest.
     let hashes = [];
     for (const kv of files.entries()){
         let i = kv[0];
@@ -23,6 +24,8 @@ async function doDirectory(dirpath, onProgress){
          });
     }
 
+    // build a dictionary of sha512 -> array of files with that digest.
+    // we can build a list of files with the same digest at the same time.
     let dict = new Map();
     let duplicates = new Set();
     
@@ -38,7 +41,7 @@ async function doDirectory(dirpath, onProgress){
         dict.set(x.sha512, names);
     }
 
-    return { hashes, dict, duplicates };
+    return { root: dirpath, hashes, dict, duplicates };
 }
 
 function* join(left, ...right){
@@ -78,9 +81,11 @@ async function main(){
     
     let dirinfo = [];
     for (const directory of directories){
+        // list files, digest files, build map of hash and list of duplicates
         const dir = await doDirectory(directory, onProgress);
         dirinfo.push( dir );
         
+        // printing duplicates.
         if (dir.duplicates.size > 0){
             console.log(`${dir.duplicates.size} duplicates in ${directory}:`);
             for (const dup of dir.duplicates){
@@ -95,6 +100,9 @@ async function main(){
             console.log(`no duplicates in ${directory}.`)
         }
     }
+
+    // find files in different folders, that have the same hash, but different file paths.
+    // (what was I thinking when I wrote this... )
     let joined = join(...dirinfo);
     let filtered = filter(joined, x=> x.left[0]!=x.right[0]);
     
@@ -102,6 +110,5 @@ async function main(){
 //    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
     console.log(`${result.length} files with different paths:`, result);    
     
-    // now filter joined with where two files are there
 }
 main();
