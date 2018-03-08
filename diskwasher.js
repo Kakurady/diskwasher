@@ -120,12 +120,15 @@ async function main(){
         const dirInfo = await doDirectory(directoryPath, onProgress);
         dirInfos.push( dirInfo );
         
+    }
+    cui.destroy();
+
+    for (const dirInfo of dirInfos){
         printDuplicates(dirInfo);
     }
-
     let misplacedFiles = findMisplacedFiles(dirInfos);
 //    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
 }
-main();
+main().catch(err => {throw err});

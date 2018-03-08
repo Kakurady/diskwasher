@@ -1,3 +1,5 @@
+const blessed = require('blessed');
+
 class ThottledUpdater{
     
     /*
@@ -53,8 +55,54 @@ class ThottledUpdater{
 
 class ConsoleUI extends ThottledUpdater {
     constructor(){
-        super({fnUpdateDelayed: (fn => setTimeout(fn, 1000)) });
+        super({fnUpdateDelayed: (fn => setTimeout(fn, 16)) });
+
+        this.screen = blessed.screen({
+            smartCSR: true, 
+            fullUnicode: true,
+            autoPadding: true
+        });
+
+        this.box = blessed.box({
+            top:"center",
+            left: "center",
+            height: "shrink",
+            border: {type:"line"},
+            padding: 1,
+            style: {
+                fg: "white",
+                bg: "black",
+                border:{
+                    fg: "white"
+                }
+            }
+        });
+
+        this.line = blessed.text({
+            top: 0,
+            left: 0,
+            height: 1,
+            content: "test",
+        });
+        this.progressBar = blessed.progressbar({
+            top: 2,
+            left: 0,
+            width: "100%-4",
+            height: 1,
+            style: {
+                fg: "red",
+                bg: "green"
+            }
+        });
+        this.box.append(this.line);
+        this.box.append(this.progressBar);
+
+        this.screen.append (this.box);
+
+        this.screen.render();
     }
+
+
 
     onChange(obj){
 
@@ -69,9 +117,15 @@ class ConsoleUI extends ThottledUpdater {
         let total = this.state.total;
         let totalMax = this.state.totalMax;
 
-        console.log(`${total} / ${totalMax}`);
+        this.progressBar.setProgress(Math.floor(total/totalMax*100));
+        this.line.content = `${total} / ${totalMax}`;
+        this.screen.render();
+
     }
 
+    destroy(){
+        this.screen.destroy();
+    }
 }
 
 module.exports = ConsoleUI;
