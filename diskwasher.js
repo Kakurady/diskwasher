@@ -5,6 +5,22 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
+async function digestDirectory(dirInfo, onProgress){
+    let files = dirInfo.files;
+    let dirpath = dirInfo.root;
+
+    // step 2: read each file and compute a sha512 digest.
+    for (const kv of files.entries()){
+        let i = kv[0];
+        let file = kv[1];
+        // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
+        onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
+
+        const fullpath = path.join(dirpath, file.relpath);
+        file.sha512 = await hasha.fromFile(fullpath, {algorithm:"sha512"});
+    }
+}
+
 function buildDigestIndex(dirInfo){
     let files = dirInfo.files;
     let digestIndex = dirInfo.digestIndex;
@@ -105,16 +121,7 @@ async function main(){
                  to pick up, I don't have to repeat myself. */
             });
 
-            // step 2: read each file and compute a sha512 digest.
-            for (const kv of files.entries()){
-                let i = kv[0];
-                let file = kv[1];
-                // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
-                onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
-        
-                const fullpath = path.join(dirpath, file.relpath);
-                file.sha512 = await hasha.fromFile(fullpath, {algorithm:"sha512"});
-            }
+
         
             // build a dictionary of sha512 -> array of files with that digest.
             // we can build a list of files with the same digest at the same time.
@@ -128,6 +135,12 @@ async function main(){
         dirInfos.push( dirInfo );
         
     }
+
+
+    for (const dirInfo of dirInfos){
+        await digestDirectory(dirInfo, onProgress);
+    }
+
     cui.destroy();
 
     for (const dirInfo of dirInfos){
