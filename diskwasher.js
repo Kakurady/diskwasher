@@ -5,6 +5,41 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
+function buildDigestIndex(dirInfo){
+    let files = dirInfo.files;
+    let digestIndex = dirInfo.digestIndex;
+    let dupsByDigest = dirInfo.dupsByDigest;
+
+    for (const kv of files.entries()){
+        let i = kv[0];
+        let x = kv[1];
+
+        let names = digestIndex.get(x.sha512) || [];
+        if (names.length>0) {
+            dupsByDigest.add(x.sha512);
+        }
+        names.push(x.relpath);
+        digestIndex.set(x.sha512, names);
+    }
+}
+
+function printDuplicates(dirInfo){
+    // printing duplicates.
+    if (dirInfo.dupsByDigest.size > 0){
+        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
+        for (const dup of dirInfo.dupsByDigest){
+            let fnames = dirInfo.digestIndex.get(dup);
+            console.log(dup);
+            for (const name of fnames){
+                console.log("\t",name);
+            }
+        }
+        console.log("");
+    } else {
+        console.log(`no duplicates in ${dirInfo.root}.`)
+    }
+}
+
 function* join(left, ...right){
 
     
@@ -37,23 +72,6 @@ function findMisplacedFiles(dirInfos){
     let filtered = filter(joined, x=> x.left[0]!=x.right[0]);
     
     return [... filtered];
-}
-
-function printDuplicates(dirInfo){
-    // printing duplicates.
-    if (dirInfo.dupsByDigest.size > 0){
-        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
-        for (const dup of dirInfo.dupsByDigest){
-            let fnames = dirInfo.digestIndex.get(dup);
-            console.log(dup);
-            for (const name of fnames){
-                console.log("\t",name);
-            }
-        }
-        console.log("");
-    } else {
-        console.log(`no duplicates in ${dirInfo.root}.`)
-    }
 }
 
 async function main(){
@@ -102,18 +120,7 @@ async function main(){
             // we can build a list of files with the same digest at the same time.
             let digestIndex = new Map();
             let dupsByDigest = new Set();
-            
-            for (const kv of files.entries()){
-                let i = kv[0];
-                let x = kv[1];
-        
-                let names = digestIndex.get(x.sha512) || [];
-                if (names.length>0) {
-                    dupsByDigest.add(x.sha512);
-                }
-                names.push(x.relpath);
-                digestIndex.set(x.sha512, names);
-            }
+
         
             return { root: dirpath, files, digestIndex, dupsByDigest };
         }
@@ -122,6 +129,10 @@ async function main(){
         
     }
     cui.destroy();
+
+    for (const dirInfo of dirInfos){
+        buildDigestIndex(dirInfo);
+    }
 
     for (const dirInfo of dirInfos){
         printDuplicates(dirInfo);
