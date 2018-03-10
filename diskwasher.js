@@ -5,6 +5,35 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
+// list files, digest files, build map of hash and list of duplicates
+async function doDirectory(dirpath, onProgress){
+    // step 1: list files under the directory.
+    // TODO: I want a progress indicator while reading
+    // TODO: want file size for each file, so I can display a progress for large files. 
+    let filenames = await recursive_readdir(dirpath);
+
+
+    let files = filenames.map(function (filename) {
+        return {
+            'relpath': path.relative(dirpath, filename),
+            'size': null,
+            'mtime': null,
+            'sha512': null
+        }
+        /*  TODO: rewrite object literal with class/instance,
+            so when adding type annotations to functions for VS Code
+            to pick up, I don't have to repeat myself. */
+    });
+
+    // build a dictionary of sha512 -> array of files with that digest.
+    // we can build a list of files with the same digest at the same time.
+    let digestIndex = new Map();
+    let dupsByDigest = new Set();
+
+
+    return { root: dirpath, files, digestIndex, dupsByDigest };
+}
+
 async function digestDirectory(dirInfo, onProgress){
     let files = dirInfo.files;
     let dirpath = dirInfo.root;
@@ -101,44 +130,26 @@ async function main(){
     
     let dirInfos = [];
     for (const directoryPath of directoryPaths){
-        // list files, digest files, build map of hash and list of duplicates
-        async function doDirectory(dirpath, onProgress){
-            // step 1: list files under the directory.
-            // TODO: I want a progress indicator while reading
-            // TODO: want file size for each file, so I can display a progress for large files. 
-            let filenames = await recursive_readdir(dirpath);
-        
-
-            let files = filenames.map(function (filename) {
-                return {
-                    'relpath': path.relative(dirpath, filename),
-                    'size': null,
-                    'mtime': null,
-                    'sha512': null
-                }
-                /*  TODO: rewrite object literal with class/instance,
-                 so when adding type annotations to functions for VS Code
-                 to pick up, I don't have to repeat myself. */
-            });
-
-
-        
-            // build a dictionary of sha512 -> array of files with that digest.
-            // we can build a list of files with the same digest at the same time.
-            let digestIndex = new Map();
-            let dupsByDigest = new Set();
-
-        
-            return { root: dirpath, files, digestIndex, dupsByDigest };
-        }
         const dirInfo = await doDirectory(directoryPath, onProgress);
         dirInfos.push( dirInfo );
         
     }
 
+    let totalFileCount = 0;
+    totalFileCount = dirInfos.reduce((acc, x) => acc + x.files.length, 0);
+    let prevDirFileCount = 0;
 
     for (const dirInfo of dirInfos){
-        await digestDirectory(dirInfo, onProgress);
+        function onDigestProgress(obj){
+            cui.onChange({
+                current: obj.current, 
+                currentMax: obj.currentMax, 
+                total:prevDirFileCount + obj.current,
+                totalMax: totalFileCount
+             });
+        }
+        await digestDirectory(dirInfo, onDigestProgress);
+        prevDirFileCount += dirInfo.files.length;
     }
 
     cui.destroy();
