@@ -5,7 +5,40 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
-// list files, digest files, build map of hash and list of duplicates
+/** @typedef {string} HashType */
+
+class DWFile{
+    constructor(obj){
+        /** @type {string} */
+        this.relpath = obj.relpath;
+        /** @type {number} */
+        this.size = obj.size;
+        /** @type {any} */
+        this.mtime = obj.mtime;
+        /**
+         * @type {HashType}
+         */
+        this.sha512 = obj.sha512;
+    }
+}
+
+class DWDirInfo{
+    constructor(obj){
+        /** @type {string} */
+        this.root = obj.root;
+        /** @type {DWFile[]} */
+        this.files = obj.files;
+        /** @type {Map<HashType, string[]>} */
+        this.digestIndex = obj.digestIndex;
+        /** @type {Set<HashType>} */
+        this.dupsByDigest = obj.dupsByDigest;
+    }
+}
+/**
+ * // list files, digest files, build map of hash and list of duplicates
+ * @param {string} dirpath 
+ * @param {*} onProgress 
+ */
 async function doDirectory(dirpath, onProgress){
     // step 1: list files under the directory.
     // TODO: I want a progress indicator while reading
@@ -14,12 +47,12 @@ async function doDirectory(dirpath, onProgress){
 
 
     let files = filenames.map(function (filename) {
-        return {
+        return new DWFile({
             'relpath': path.relative(dirpath, filename),
             'size': null,
             'mtime': null,
             'sha512': null
-        }
+        });
         /*  TODO: rewrite object literal with class/instance,
             so when adding type annotations to functions for VS Code
             to pick up, I don't have to repeat myself. */
@@ -31,9 +64,14 @@ async function doDirectory(dirpath, onProgress){
     let dupsByDigest = new Set();
 
 
-    return { root: dirpath, files, digestIndex, dupsByDigest };
+    return new DWDirInfo({ root: dirpath, files, digestIndex, dupsByDigest });
 }
 
+/**
+ * 
+ * @param {DWDirInfo} dirInfo 
+ * @param {*} onProgress 
+ */
 async function digestDirectory(dirInfo, onProgress){
     let files = dirInfo.files;
     let dirpath = dirInfo.root;
@@ -50,6 +88,10 @@ async function digestDirectory(dirInfo, onProgress){
     }
 }
 
+/**
+ * 
+ * @param {DWDirInfo} dirInfo 
+ */
 function buildDigestIndex(dirInfo){
     let files = dirInfo.files;
     let digestIndex = dirInfo.digestIndex;
@@ -68,6 +110,10 @@ function buildDigestIndex(dirInfo){
     }
 }
 
+/**
+ * 
+ * @param {DWDirInfo} dirInfo 
+ */
 function printDuplicates(dirInfo){
     // printing duplicates.
     if (dirInfo.dupsByDigest.size > 0){
@@ -85,6 +131,11 @@ function printDuplicates(dirInfo){
     }
 }
 
+/**
+ * 
+ * @param {DWDirInfo} left 
+ * @param {DWDirInfo[]} right 
+ */
 function* join(left, ...right){
 
     
@@ -102,6 +153,12 @@ function* join(left, ...right){
     }
 }
 
+/**
+ * 
+ * @template T
+ * @param {IterableIterator<T>} iter 
+ * @param {*} fn 
+ */
 function* filter(iter, fn){
     for (const x of iter){
         if (fn(x)){
@@ -110,6 +167,10 @@ function* filter(iter, fn){
     }
 }
 
+/**
+ * 
+ * @param {DWDirInfo} dirInfos 
+ */
 function findMisplacedFiles(dirInfos){
     // find files in different folders, that have the same hash, but different file paths.
     // (what was I thinking when I wrote this... )
