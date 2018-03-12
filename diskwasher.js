@@ -224,7 +224,7 @@ async function main(){
     }
     let misplacedFiles = findMisplacedFiles(dirInfos);
 //    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
 }
 main().catch(err => {throw err});
