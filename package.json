@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "SEE LICENSE IN package.json",
+  "license": "ISC",
   "dependencies": {
     "blessed": "^0.1.81",
     "hasha": "^3.0.0",
