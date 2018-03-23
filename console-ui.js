@@ -123,9 +123,69 @@ class ConsoleUI extends ThottledUpdater {
 
     }
 
+    /**
+     * 
+     * @param {DWDirInfo[]} dirInfos 
+     */
+    showDuplicates(dirInfos){
+        let items = [];
+        items = flatMap(
+            dirInfos, 
+            dirInfo => flatMap(
+                [...dirInfo.dupsByDigest], 
+                x=>[x, ...dirInfo.digestIndex.get(x)]
+            ));
+
+        this.list = blessed.list({
+            top: "0",
+            left: "0",
+            height: "100%",
+            width: "100%",
+            scrollable: true,
+            keys: true,
+            mouse: true,
+            //alwaysScroll: true,
+            scrollbar:{
+                ch: ' ',
+                bg: "yellow"
+            },
+            interactive: true,
+            invertSelected: true,
+            style: {
+                fg: "white",
+                bg: "black",
+                border:{
+                    fg: "white"
+                },
+                item:              
+                { fg: "white",
+                bg: "black"},
+
+                selected:                 { fg: "white",
+                bg: "blue"}
+            },
+            items: items
+        });
+        this.screen.append(this.list);
+        this.screen.render();
+
+        this.screen.key('q', function() {
+            return this.destroy();
+        });
+          
+    }
     destroy(){
         this.screen.destroy();
     }
+}
+
+function _flatMap(arr, func){
+    return arr
+    .map(func)
+    .reduce((acc, it)=>{acc.push(...it);return acc;});
+}
+function flatMap(arr, func){
+    return arr.flatMap && arr.flatMap(func) || _flatMap(arr, func);
 }
 
 module.exports = ConsoleUI;

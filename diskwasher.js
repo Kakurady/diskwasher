@@ -5,11 +5,13 @@ const path = require("path");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
-/** @typedef {string} HashType */
+/** @typedef {string} HashType 
+ *  @typedef {string} PathType
+*/
 
 class DWFile{
     constructor(obj){
-        /** @type {string} */
+        /** @type {PathType} */
         this.relpath = obj.relpath;
         /** @type {number} */
         this.size = obj.size;
@@ -28,7 +30,7 @@ class DWDirInfo{
         this.root = obj.root;
         /** @type {DWFile[]} */
         this.files = obj.files;
-        /** @type {Map<HashType, string[]>} */
+        /** @type {Map<HashType, PathType[]>} */
         this.digestIndex = obj.digestIndex;
         /** @type {Set<HashType>} */
         this.dupsByDigest = obj.dupsByDigest;
@@ -130,7 +132,22 @@ function printDuplicates(dirInfo){
         console.log(`no duplicates in ${dirInfo.root}.`)
     }
 }
-
+function printDuplicates(dirInfo){
+    // printing duplicates.
+    if (dirInfo.dupsByDigest.size > 0){
+        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
+        for (const dup of dirInfo.dupsByDigest){
+            let fnames = dirInfo.digestIndex.get(dup);
+            console.log(dup);
+            for (const name of fnames){
+                console.log("\t",name);
+            }
+        }
+        console.log("");
+    } else {
+        console.log(`no duplicates in ${dirInfo.root}.`)
+    }
+}
 /**
  * 
  * @param {DWDirInfo} left 
@@ -213,18 +230,19 @@ async function main(){
         prevDirFileCount += dirInfo.files.length;
     }
 
-    cui.destroy();
+    //cui.destroy();
 
     for (const dirInfo of dirInfos){
         buildDigestIndex(dirInfo);
     }
 
     for (const dirInfo of dirInfos){
-        printDuplicates(dirInfo);
+        //printDuplicates(dirInfo);
     }
+    cui.showDuplicates(dirInfos);
     let misplacedFiles = findMisplacedFiles(dirInfos);
 //    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
 }
 main().catch(err => {throw err});
