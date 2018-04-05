@@ -2,6 +2,9 @@
 const recursive_readdir = require("recursive-readdir");
 const hasha = require("hasha");
 const path = require("path");
+// FIXME use stream-buffers instead, less dependency
+const memoryStreams = require("memory-streams");
+const nodeConsole = require("console");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
@@ -224,6 +227,8 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
 
 async function main(){
     let cui = new ConsoleUI();
+    let bufOutputStream = new memoryStreams.WritableStream();
+    let timeConsole = new nodeConsole.Console(bufOutputStream);
 
     function onProgress(obj){
         cui.onChange(obj);
@@ -231,6 +236,9 @@ async function main(){
     
     let directoryPaths = process.argv.slice(2);
     
+    timeConsole.time("Program");
+    timeConsole.time("listfiles");
+
     let dirInfos = [];
     for (const directoryPath of directoryPaths){
         // list files in each directory
@@ -238,11 +246,13 @@ async function main(){
         dirInfos.push( dirInfo );
         
     }
+    timeConsole.timeEnd("listfiles");
 
     let totalFileCount = 0;
     totalFileCount = dirInfos.reduce((acc, x) => acc + x.files.length, 0);
     let prevDirFileCount = 0;
 
+    timeConsole.time("hash");
     for (const dirInfo of dirInfos){
         function onDigestProgress(obj){
             cui.onChange({
@@ -256,7 +266,7 @@ async function main(){
         await digestDirectory(dirInfo, onDigestProgress);
         prevDirFileCount += dirInfo.files.length;
     }
-
+    timeConsole.timeEnd("hash");
 
     // Build digest index
     for (const dirInfo of dirInfos){
@@ -275,7 +285,14 @@ async function main(){
     //let misplacedFiles = findMisplacedFiles(dirInfos);
     //let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
     //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    
     let notBackedUpFiles = ImTakingTheHDDAwayWithMe([dirInfos[0]],[...dirInfos.slice(1)]);
     cui.showFilesNotBackedUp(notBackedUpFiles);
+    timeConsole.timeEnd("Program");
+    //cui.destroy();
+
+    await cui.finish();
+    console.log(bufOutputStream.toString());
+
 }
 main().catch(err => {throw err});

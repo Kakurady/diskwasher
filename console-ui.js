@@ -63,6 +63,17 @@ class ConsoleUI extends ThottledUpdater {
             autoPadding: true
         });
 
+        // FIXME use Symbol to hide this or maybe a better name
+        this._finishedPromise = new Promise((resolve, reject)=>{
+            try {
+                this.screen.on("destroy",()=>{
+                    resolve();
+                })
+            } catch (ex){
+                reject(ex);
+            }
+        });
+
         this.box = blessed.box({
             top:"center",
             left: "center",
@@ -103,6 +114,9 @@ class ConsoleUI extends ThottledUpdater {
     }
 
 
+    finish(){
+        return this._finishedPromise;
+    }
 
     onChange(obj){
 

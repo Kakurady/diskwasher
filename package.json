@@ -12,6 +12,7 @@
     "blessed": "^0.1.81",
     "hasha": "^3.0.0",
     "intl-pluralrules": "^0.1.0",
+    "memory-streams": "^0.1.3",
     "recursive-readdir": "^2.2.1"
   }
 }
