@@ -250,8 +250,19 @@ async function main(){
     let bufOutputStream = new memoryStreams.WritableStream();
     let timeConsole = new nodeConsole.Console(bufOutputStream);
 
+    let totalFileCount = 0;
+    let prevDirFileCount = 0;
+
     function onProgress(obj){
         cui.onChange(obj);
+    }
+    function onListProgress(obj){
+        cui.onChange({
+            current: obj.current, 
+            currentMax: obj.currentMax, 
+            total:obj.total,
+            totalMax: totalFileCount + obj.totalMax
+         });
     }
     
     let directoryPaths = process.argv.slice(2);
@@ -261,16 +272,21 @@ async function main(){
 
     let dirInfos = [];
     for (const directoryPath of directoryPaths){
-        // list files in each directory
-        const dirInfo = await doDirectory(directoryPath, onProgress);
-        dirInfos.push( dirInfo );
+        try {
+            // list files in each directory
+            const dirInfo = await doDirectory(directoryPath, onListProgress);
+            dirInfos.push( dirInfo );
+            totalFileCount += dirInfo.files.length;
+        } catch (error) {
+            throw error;
+        }
+
         
     }
     timeConsole.timeEnd("listfiles");
 
-    let totalFileCount = 0;
+
     totalFileCount = dirInfos.reduce((acc, x) => acc + x.files.length, 0);
-    let prevDirFileCount = 0;
 
     timeConsole.time("hash");
     for (const dirInfo of dirInfos){
