@@ -5,6 +5,7 @@ const path = require("path");
 // FIXME use stream-buffers instead, less dependency
 const memoryStreams = require("memory-streams");
 const nodeConsole = require("console");
+const walker = require("walker");
 require ("intl-pluralrules");
 const ConsoleUI = require ("./console-ui");
 
@@ -39,37 +40,56 @@ class DWDirInfo{
         this.dupsByDigest = obj.dupsByDigest;
     }
 }
+
 /**
  * // list files, digest files, build map of hash and list of duplicates
  * @param {string} dirpath 
  * @param {*} onProgress 
  */
 async function doDirectory(dirpath, onProgress){
+    
     // step 1: list files under the directory.
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
-    let filenames = await recursive_readdir(dirpath);
-
-
-    let files = filenames.map(function (filename) {
-        return new DWFile({
-            'relpath': path.relative(dirpath, filename),
-            'size': null,
-            'mtime': null,
-            'sha512': null
+    let count = 0;
+    function recursive_read(path){
+        return new Promise((resolve, reject)=>{
+            let files = [];
+            walker(path)
+            .on("file", (file, stat)=>{
+                onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1});
+                files.push(file); 
+                count++;
+            })
+            .on("err", ()=>{}) // FIXME do something with errors
+            .on('end', ()=>resolve(files.sort()));
         });
-        /*  TODO: rewrite object literal with class/instance,
-            so when adding type annotations to functions for VS Code
-            to pick up, I don't have to repeat myself. */
-    });
+    }
+    try {
+        let filenames = await recursive_read(dirpath);
 
-    // build a dictionary of sha512 -> array of files with that digest.
-    // we can build a list of files with the same digest at the same time.
-    let digestIndex = new Map();
-    let dupsByDigest = new Set();
+        let files = filenames.map(function (filename) {
+            return new DWFile({
+                'relpath': path.relative(dirpath, filename),
+                'size': null,
+                'mtime': null,
+                'sha512': null
+            });
+            /*  TODO: rewrite object literal with class/instance,
+                so when adding type annotations to functions for VS Code
+                to pick up, I don't have to repeat myself. */
+        });
+
+        // build a dictionary of sha512 -> array of files with that digest.
+        // we can build a list of files with the same digest at the same time.
+        let digestIndex = new Map();
+        let dupsByDigest = new Set();
 
 
-    return new DWDirInfo({ root: dirpath, files, digestIndex, dupsByDigest });
+        return new DWDirInfo({ root: dirpath, files, digestIndex, dupsByDigest });
+    } catch (error) {
+        throw error;
+    }
 }
 
 /**
@@ -213,7 +233,7 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
                     .map(otherDirInfo =>
                         otherDirInfo.digestIndex.has(file.sha512)
                     )
-                    .reduce((pre, cur) => pre || cur)
+                    .reduce((pre, cur) => pre || cur, false)
             ) {
                 return false;
             }
