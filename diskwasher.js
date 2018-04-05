@@ -196,6 +196,31 @@ function findMisplacedFiles(dirInfos){
     
     return [... filtered];
 }
+/**
+ * find files in {going} that don't have any counterparts in {staying}.
+ * 
+ * @param {DWDirInfo[]} going 
+ * @param {DWDirInfo[]} staying 
+ */
+function ImTakingTheHDDAwayWithMe(going, staying) {
+    return going.map(function(dirInfo) {
+        let missingFiles = [...dirInfo.files].filter(file => {
+            if (
+                staying
+                    .map(otherDirInfo =>
+                        otherDirInfo.digestIndex.has(file.sha512)
+                    )
+                    .reduce((pre, cur) => pre || cur)
+            ) {
+                return false;
+            }
+            // then there are none
+            return true;
+        });
+
+        return missingFiles;
+    });
+}
 
 async function main(){
     let cui = new ConsoleUI();
@@ -208,6 +233,7 @@ async function main(){
     
     let dirInfos = [];
     for (const directoryPath of directoryPaths){
+        // list files in each directory
         const dirInfo = await doDirectory(directoryPath, onProgress);
         dirInfos.push( dirInfo );
         
@@ -226,23 +252,30 @@ async function main(){
                 totalMax: totalFileCount
              });
         }
+        // read file content and create sha512 digest
         await digestDirectory(dirInfo, onDigestProgress);
         prevDirFileCount += dirInfo.files.length;
     }
 
-    //cui.destroy();
 
+    // Build digest index
     for (const dirInfo of dirInfos){
         buildDigestIndex(dirInfo);
     }
 
-    for (const dirInfo of dirInfos){
-        //printDuplicates(dirInfo);
-    }
-    cui.showDuplicates(dirInfos);
-    let misplacedFiles = findMisplacedFiles(dirInfos);
-//    let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    // print duplicates (which is convienently built at the same time as digest index)
+    // for (const dirInfo of dirInfos){
+    //     printDuplicates(dirInfo);
+    // }
+    // print duplicates on terminal instead
+    // cui.showDuplicates(dirInfos);
     
+
+    // Find misplaced files
+    //let misplacedFiles = findMisplacedFiles(dirInfos);
+    //let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
+    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
+    let notBackedUpFiles = ImTakingTheHDDAwayWithMe([dirInfos[0]],[...dirInfos.slice(1)]);
+    cui.showFilesNotBackedUp(notBackedUpFiles);
 }
 main().catch(err => {throw err});
