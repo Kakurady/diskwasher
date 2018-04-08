@@ -70,6 +70,23 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
     let dirGlobs = [...globsToIgnore, ...[...globsToIgnore]
             .filter(x => x.endsWith(path.sep))
             .map(x => x.slice(0, -1))];
+
+    let dirMatchers = dirGlobs.map(x =>
+        micromatch.matcher(x, { dot: true })
+    );
+    let fileMatchers = globsToIgnore.map(x =>
+        micromatch.matcher(x, { dot: true })
+    );
+
+    /**
+     * Given path, try all matchers if any fit
+     * @param {string} fullpath 
+     * @param {string} relpath 
+     * @param {((str:string) => boolean)[]} matchers 
+     */
+    function tryMatchers(fullpath, relpath, matchers){
+        return matchers.reduce((acc, matcher) => acc || matcher(fullpath) || matcher(relpath), false);
+    }
     // step 1: list files under the directory.
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
@@ -95,7 +112,10 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
             let files = [];
             walker(_dirpath)
             .filterDir( (dir)=>{
-                let res = ! micromatch.any(dir, dirGlobs, { dot:true })
+                let relpath = path.relative(_dirpath, dir);
+
+                let res = !tryMatchers(dir, relpath, dirMatchers);
+
                 if (testGlobIgnore){ directoriesTested.push(`${res}, ${dir}`); }
                 return res;
             })
