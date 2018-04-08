@@ -328,14 +328,16 @@ async function testDirectoriesAreStatable(directoryPaths) {
     
 }
 
-let create_subfolders = function create_subfolders(base, ...paths){
+async function create_subfolders(base, ...paths){
+    const mkdirAsync = util.promisify(fs.mkdir);
+
     var length = paths.length;
-    var success = false;
+    let success = false;
     while (!success && length > 0){
         try {
             // try to create directory "base + path[0, length)"
             let dirname = path.join(base, ...(paths.slice(0, length)));
-            fs.mkdirSync(dirname);
+            await mkdirAsync(dirname);
             success = true;
         } catch (e){
             if (e.code == "ENOENT"){
@@ -356,7 +358,7 @@ let create_subfolders = function create_subfolders(base, ...paths){
     // "base + path[0, length)" should exist now, so add 1 to length
     for(length++ ; length <= paths.length; length++){
         let dirname = path.join(base, paths.slice(0, length));
-        fs.mkdirSync(dirname);
+        await mkdirAsync(dirname);
     }
 }
 /**
@@ -368,11 +370,17 @@ let create_subfolders = function create_subfolders(base, ...paths){
  * @returns if a backup was made
  */
 let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwrite = true){
-    var paths = path.normalize(filename).split(path.sep);
+    const openAsync = util.promisify(fs.open);
+    const renameAsync = util.promisify(fs.rename);
+    const writeFileAsync = util.promisify(fs.writeFile);
+    const closeAsync = util.promisify(fs.close);
+
+    const paths = path.normalize(filename).split(path.sep);
     // move last part of path into filename.
     filename = paths.pop();
 
     const full_path = path.join(basepath, ...paths, filename);
+    
 
     // DEBUG path handling
     // timeConsole.log(JSON.stringify(paths),filename, full_path)
@@ -381,18 +389,18 @@ let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwri
     // try to open a file handle
     var subdir_created = false;
     var backup_copied = false;
-    var success = false;
+    var open_succeeded = false;
     var fd;
-    while (!success){
+    while (!open_succeeded){
         try {
-            fd = fs.openSync(full_path, "wx");
-            success = true;
+            fd = await openAsync(full_path, "wx");
+            open_succeeded = true;
             
         } catch (e){
             if (e.code == "ENOENT" && !subdir_created){
                 // can't find ancestor folders, have to create them
                 try {
-                    create_subfolders(basepath, ...paths);
+                    await create_subfolders(basepath, ...paths);
                     subdir_created = true;
                 } catch (e) {
                     // there was a problem creating ancestor folders
@@ -406,7 +414,7 @@ let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwri
                 // on Linux, renames overwrite existing files, so don't have to test for it
                 // ... unless the old backup exists, and is a directory. Then, trying to move another file to that name will fail
                 try {
-                    fs.renameSync(full_path, backup_path); 
+                    await renameAsync(full_path, backup_path); 
                     backup_copied = true;
                 } catch (e) {
                     // there was a problem making a backup copy
@@ -419,8 +427,8 @@ let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwri
         }
     }
     
-    fs.writeFileSync(fd, text);
-    fs.closeSync(fd);
+    await writeFileAsync(fd, text);
+    await closeAsync(fd);
     return backup_copied;
 }
 
