@@ -1,6 +1,9 @@
 "use strict";
-const recursive_readdir = require("recursive-readdir");
+const crypto = require("crypto");
+const fs = require("fs");
+const util = require("util");
 const hasha = require("hasha");
+const bottleneck = require("bottleneck");
 const path = require("path");
 // FIXME use stream-buffers instead, less dependency
 const memoryStreams = require("memory-streams");
@@ -52,33 +55,52 @@ async function doDirectory(dirpath, onProgress){
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
     let count = 0;
-    function recursive_read(path){
+    function countSeps(str){
+        let count = 0;
+        for (const char of str){
+            if (char == path.sep){
+                count++;
+            }
+        }
+        return count;
+    }
+    function recursive_read(_dirpath){
         return new Promise((resolve, reject)=>{
+            /**@type DWFile[] */
             let files = [];
-            walker(path)
+            walker(_dirpath)
             .on("file", (file, stat)=>{
                 onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1});
-                files.push(file); 
+                files.push(new DWFile({
+                    'relpath': path.relative(_dirpath, file),
+                    'size': stat.size,
+                    'mtime': stat.mtime,
+                    'sha512': null
+                })); 
                 count++;
             })
             .on("err", ()=>{}) // FIXME do something with errors
-            .on('end', ()=>resolve(files.sort()));
+            .on('end', ()=>resolve(files.sort((a,b)=>{
+                // fixme directories before/after files                
+                let patha = a.relpath.split(path.sep);
+                let pathb = b.relpath.split(path.sep);
+
+                while (patha[0].localeCompare(pathb[0]) == 0){
+                    patha.shift();
+                    pathb.shift();
+                }
+                //console.log(patha, pathb);
+                if (patha.length == 1 && pathb.length == 1){ return a.relpath.localeCompare(b.relpath);;}
+                if (patha.length == 1){ return -1;}
+                if (pathb.length == 1){ return 1;}
+                return a.relpath.localeCompare(b.relpath);
+            }
+                // FIXME compare asciibetcally
+            )));
         });
     }
     try {
-        let filenames = await recursive_read(dirpath);
-
-        let files = filenames.map(function (filename) {
-            return new DWFile({
-                'relpath': path.relative(dirpath, filename),
-                'size': null,
-                'mtime': null,
-                'sha512': null
-            });
-            /*  TODO: rewrite object literal with class/instance,
-                so when adding type annotations to functions for VS Code
-                to pick up, I don't have to repeat myself. */
-        });
+        let files = await recursive_read(dirpath);
 
         // build a dictionary of sha512 -> array of files with that digest.
         // we can build a list of files with the same digest at the same time.
@@ -92,6 +114,25 @@ async function doDirectory(dirpath, onProgress){
     }
 }
 
+async function digestFile(basepath, file, onProgress, prev){
+    const fullpath = path.join(basepath, file.relpath);
+    if (file.size > 1024*1024) { await prev; }
+    try {
+        const readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
+        try {
+            file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
+        } catch (error) {
+            nodeConsole.error(error);
+            readStream.close();
+        }
+    } catch (error) {          
+        nodeConsole.error(error);
+    }
+
+    
+    await prev;
+}
+
 /**
  * 
  * @param {DWDirInfo} dirInfo 
@@ -100,17 +141,35 @@ async function doDirectory(dirpath, onProgress){
 async function digestDirectory(dirInfo, onProgress){
     let files = dirInfo.files;
     let dirpath = dirInfo.root;
+    let prev = null;
 
+    let count = 0;
+    let open = 0;
+
+    async function digestFile(basepath, file, onProgress, prev){
+        open++;
+
+        const fullpath = path.join(basepath, file.relpath);
+        const readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
+        file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
+
+        onProgress({current:count, currentMax: files.length, total: count, totalMax: files.length});
+        count++;
+
+        open--;
+    }
     // step 2: read each file and compute a sha512 digest.
+    let limiter = new bottleneck({maxConcurrent: 10});
     for (const kv of files.entries()){
         let i = kv[0];
         let file = kv[1];
         // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
-        onProgress({current:i, currentMax: files.length, total: i, totalMax: files.length});
 
-        const fullpath = path.join(dirpath, file.relpath);
-        file.sha512 = await hasha.fromFile(fullpath, {algorithm:"sha512"});
+        //prev = limiter.schedule({weight: (file.size > 256*1024)? 10: 1}, ()=>digestFile(dirpath, file, onProgress, prev));
+        prev = digestFile(dirpath, file, onProgress, prev);
+        await prev;
     }
+    await prev;
 }
 
 /**
@@ -229,6 +288,7 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
     return going.map(function(dirInfo) {
         let missingFiles = [...dirInfo.files].filter(file => {
             if (
+                !file.sha512 ||
                 staying
                     .map(otherDirInfo =>
                         otherDirInfo.digestIndex.has(file.sha512)
@@ -246,9 +306,33 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
 }
 
 async function main(){
-    let cui = new ConsoleUI();
+    // first test input?
+    let directoryPaths = process.argv.slice(2);
     let bufOutputStream = new memoryStreams.WritableStream();
     let timeConsole = new nodeConsole.Console(bufOutputStream);
+    
+    {
+        const statAsync = util.promisify(fs.stat);
+        let issues = [];
+
+        for (const directoryPath of directoryPaths){
+            try{
+                let stats = await statAsync(directoryPath);
+                if(! (stats.isFile() || stats.isDirectory() || stats.isSymbolicLink())){
+                    issues.push(`${directoryPath} is not a file or directory.`)
+                }
+                
+            }
+            catch (ex){
+                issues.push(`Error when trying to stat ${directoryPath}.`)
+            }
+        }
+        console.log(issues.join("\n"));
+        if (issues.length > 0) {throw issues[0];}
+    }
+
+
+    let cui = new ConsoleUI();
 
     let totalFileCount = 0;
     let prevDirFileCount = 0;
@@ -265,7 +349,6 @@ async function main(){
          });
     }
     
-    let directoryPaths = process.argv.slice(2);
     
     timeConsole.time("Program");
     timeConsole.time("listfiles");
@@ -322,7 +405,7 @@ async function main(){
     //let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
     //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
-    let notBackedUpFiles = ImTakingTheHDDAwayWithMe([dirInfos[0]],[...dirInfos.slice(1)]);
+    let notBackedUpFiles = ImTakingTheHDDAwayWithMe([...dirInfos.slice(0,1)],[...dirInfos.slice(1)]);
     cui.showFilesNotBackedUp(notBackedUpFiles);
     timeConsole.timeEnd("Program");
     //cui.destroy();
