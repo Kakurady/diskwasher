@@ -328,6 +328,101 @@ async function testDirectoriesAreStatable(directoryPaths) {
     
 }
 
+let create_subfolders = function create_subfolders(base, ...paths){
+    var length = paths.length;
+    var success = false;
+    while (!success && length > 0){
+        try {
+            // try to create directory "base + path[0, length)"
+            let dirname = path.join(base, ...(paths.slice(0, length)));
+            fs.mkdirSync(dirname);
+            success = true;
+        } catch (e){
+            if (e.code == "ENOENT"){
+                // rrr! no parent directory
+                if (length > 1){
+                    // back off one level and try again
+                    length--;
+                } else {
+                    // already at "base + path [0, 1)", giving up
+                    throw e;
+                }
+            } else {
+                throw e;
+            }
+        }
+    }
+    // recursively create subdirectories. 
+    // "base + path[0, length)" should exist now, so add 1 to length
+    for(length++ ; length <= paths.length; length++){
+        let dirname = path.join(base, paths.slice(0, length));
+        fs.mkdirSync(dirname);
+    }
+}
+/**
+ * 
+ * @param {string?} basepath 
+ * @param {string} filename 
+ * @param {any} text 
+ * @param {boolean} overwrite 
+ * @returns if a backup was made
+ */
+let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwrite = true){
+    var paths = path.normalize(filename).split(path.sep);
+    // move last part of path into filename.
+    filename = paths.pop();
+
+    const full_path = path.join(basepath, ...paths, filename);
+
+    // DEBUG path handling
+    // timeConsole.log(JSON.stringify(paths),filename, full_path)
+    // FIXME should it try to create ../../ if creating ../../a fails?
+
+    // try to open a file handle
+    var subdir_created = false;
+    var backup_copied = false;
+    var success = false;
+    var fd;
+    while (!success){
+        try {
+            fd = fs.openSync(full_path, "wx");
+            success = true;
+            
+        } catch (e){
+            if (e.code == "ENOENT" && !subdir_created){
+                // can't find ancestor folders, have to create them
+                try {
+                    create_subfolders(basepath, ...paths);
+                    subdir_created = true;
+                } catch (e) {
+                    // there was a problem creating ancestor folders
+                    throw e;
+                }
+            
+                // FIXME: Maybe ask interactively if overwrite (or always do)
+            } else if (e.code == "EEXIST" && !backup_copied && !!overwrite ){
+                // there's already an existing file, need to move it
+                let backup_path = path.join(basepath, ...paths, `${filename}~`);
+                // on Linux, renames overwrite existing files, so don't have to test for it
+                // ... unless the old backup exists, and is a directory. Then, trying to move another file to that name will fail
+                try {
+                    fs.renameSync(full_path, backup_path); 
+                    backup_copied = true;
+                } catch (e) {
+                    // there was a problem making a backup copy
+                    throw e;
+                }
+            } else {
+                // something else went wrong trying to open the file
+                throw e;
+            }
+        }
+    }
+    
+    fs.writeFileSync(fd, text);
+    fs.closeSync(fd);
+    return backup_copied;
+}
 
 async function main(){
     // first test input?
@@ -432,100 +527,19 @@ async function main(){
             // turn array into string
             let str = arr.join("\n");
             // write string to file
-            let create_subfolders = function create_subfolders(base, ...paths){
-                var length = paths.length;
-                var success = false;
-                while (!success && length > 0){
-                    try {
-                        // try to create directory "base + path[0, length)"
-                        let dirname = path.join(base, ...(paths.slice(0, length)));
-                        fs.mkdirSync(dirname);
-                        success = true;
-                    } catch (e){
-                        if (e.code == "ENOENT"){
-                            // rrr! no parent directory
-                            if (length > 1){
-                                // back off one level and try again
-                                length--;
-                            } else {
-                                // already at "base + path [0, 1)", giving up
-                                throw e;
-                            }
-                        } else {
-                            throw e;
-                        }
-                    }
-                }
-                // recursively create subdirectories. 
-                // "base + path[0, length)" should exist now, so add 1 to length
-                for(length++ ; length <= paths.length; length++){
-                    let dirname = path.join(base, paths.slice(0, length));
-                    fs.mkdirSync(dirname);
-                }
+
+            let backup_copied = await write_pp3("", yargv.output, str);
+            cui.destroy();
+            if (backup_copied){
+                timeConsole.info(`Files not backed up report overwritten to ${yargv.output}. Previous content of output file moved to backup.`);
+            } else {
+                timeConsole.info(`Files not backed up report written to ${yargv.output}`);
             }
-            let write_pp3 = function _write_pp3(filename, text){
-                var basepath = "";
-                var paths = path.normalize(filename).split(path.sep);
-                // move last part of path into filename.
-                filename = paths.pop();
-
-                const full_path = path.join(basepath, ...paths, filename);
-
-                // DEBUG path handling
-                timeConsole.log(JSON.stringify(paths),filename, full_path)
-                // FIXME should it try to create ../../ if creating ../../a fails?
-
-                // try to open a file handle
-                var subdir_created = false;
-                var backup_copied = false;
-                var success = false;
-                var fd;
-                while (!success){
-                    try {
-                        fd = fs.openSync(full_path, "wx");
-                        success = true;
-                        
-                    } catch (e){
-                        if (e.code == "ENOENT" && !subdir_created){
-                            // can't find ancestor folders, have to create them
-                            try {
-                                create_subfolders(basepath, ...paths);
-                                subdir_created = true;
-                            } catch (e) {
-                                // there was a problem creating ancestor folders
-                                throw e;
-                            }
-                        
-                        } else if (e.code == "EEXIST" && !backup_copied){
-                            // there's already an existing file, need to move it
-                            let backup_path = path.join(basepath, ...paths, `${filename}~`);
-                            // on Linux, renames overwrite existing files, so don't have to test for it
-                            // ... unless the old backup exists, and is a directory. Then, trying to move another file to that name will fail
-                            try {
-                                fs.renameSync(full_path, backup_path); 
-                                backup_copied = true;
-                            } catch (e) {
-                                // there was a problem making a backup copy
-                                throw e;
-                            }
-                        } else {
-                            // something else went wrong trying to open the file
-                            throw e;
-                        }
-                    }
-                }
-                
-                fs.writeFileSync(fd, text);
-                fs.closeSync(fd);
-                //return success;
-            }
-
-            write_pp3(yargv.output, str);
         } catch (error) {
-            
+            cui.destroy();
+            console.error(error);
         }
 
-        cui.destroy();
     } else {
         cui.showFilesNotBackedUp(notBackedUpFiles);
     }
