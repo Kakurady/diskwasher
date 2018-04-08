@@ -2,14 +2,16 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const util = require("util");
-const hasha = require("hasha");
-const bottleneck = require("bottleneck");
+const nodeConsole = require("console");
 const path = require("path");
+
+const hasha = require("hasha");
 // FIXME use stream-buffers instead, less dependency
 const memoryStreams = require("memory-streams");
-const nodeConsole = require("console");
 const walker = require("walker");
+const yargs = require("yargs");
 require ("intl-pluralrules");
+
 const ConsoleUI = require ("./console-ui");
 
 /** @typedef {string} HashType 
@@ -159,7 +161,6 @@ async function digestDirectory(dirInfo, onProgress){
         open--;
     }
     // step 2: read each file and compute a sha512 digest.
-    let limiter = new bottleneck({maxConcurrent: 10});
     for (const kv of files.entries()){
         let i = kv[0];
         let file = kv[1];
@@ -305,32 +306,48 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
     });
 }
 
+async function testDirectoriesAreStatable(directoryPaths) {
+    
+    const statAsync = util.promisify(fs.stat);
+    let issues = [];
+    for (const directoryPath of directoryPaths) {
+        try {
+            let stats = await statAsync(directoryPath);
+            if (!(stats.isFile() || stats.isDirectory() || stats.isSymbolicLink())) {
+                issues.push(`${directoryPath} is not a file or directory.`);
+            }
+        }
+        catch (ex) {
+            issues.push(`Error when trying to stat ${directoryPath}.`);
+        }
+    }
+    console.log(issues.join("\n"));
+    if (issues.length > 0) {
+        throw issues[0];
+    }
+    
+}
+
+
 async function main(){
     // first test input?
-    let directoryPaths = process.argv.slice(2);
     let bufOutputStream = new memoryStreams.WritableStream();
     let timeConsole = new nodeConsole.Console(bufOutputStream);
     
-    {
-        const statAsync = util.promisify(fs.stat);
-        let issues = [];
-
-        for (const directoryPath of directoryPaths){
-            try{
-                let stats = await statAsync(directoryPath);
-                if(! (stats.isFile() || stats.isDirectory() || stats.isSymbolicLink())){
-                    issues.push(`${directoryPath} is not a file or directory.`)
-                }
-                
-            }
-            catch (ex){
-                issues.push(`Error when trying to stat ${directoryPath}.`)
-            }
+    //await testDirectoriesAreStatable(directoryPaths);
+    let yargv = 
+    yargs.options({
+        'output': {
+            alias: 'o',
+            normalize: true,
+            nargs: 1,
+            desc: "filename to output results to. if empty, will display result"
         }
-        console.log(issues.join("\n"));
-        if (issues.length > 0) {throw issues[0];}
-    }
-
+    }).argv;
+    timeConsole.log(JSON.stringify(yargv, null, "  "));
+    //.command('*', 'showNotBackedUp')
+    
+    let directoryPaths = yargv._;
 
     let cui = new ConsoleUI();
 
@@ -406,12 +423,20 @@ async function main(){
     //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
     
     let notBackedUpFiles = ImTakingTheHDDAwayWithMe([...dirInfos.slice(0,1)],[...dirInfos.slice(1)]);
-    cui.showFilesNotBackedUp(notBackedUpFiles);
-    timeConsole.timeEnd("Program");
-    //cui.destroy();
+    if (yargv.output){
 
-    await cui.finish();
+        
+        cui.destroy();
+    } else {
+        cui.showFilesNotBackedUp(notBackedUpFiles);
+    }
+    timeConsole.timeEnd("Program");
+
+    if (!yargs.output){
+        await cui.finish();
+    }
     console.log(bufOutputStream.toString());
 
 }
 main().catch(err => {throw err});
+
