@@ -55,6 +55,8 @@ class DWDirInfo{
         this.digestIndex = obj.digestIndex;
         /** @type {Set<HashType>} */
         this.dupsByDigest = obj.dupsByDigest;
+        /** @type {Set<PathType>} */
+        this.fileWithErrors = obj.fileWithErrors;
     }
 }
 
@@ -72,6 +74,12 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
     let count = 0;
+    let fileWithErrors = new Set();
+    let digestIndex = new Map();
+    let pathIndex = new Map();
+    let basepathIndex = new Map();
+    let dupsByDigest = new Set();
+
     function countSeps(str){
         let count = 0;
         for (const char of str){
@@ -104,7 +112,9 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
                 })); 
                 count++;
             })
-            .on("err", ()=>{}) // FIXME do something with errors
+            .on("error", (er, entry, stat)=>{
+                fileWithErrors.add(entry);
+            }) // FIXME do something with errors
             .on('end', ()=>resolve(files.sort((a,b)=>{
                 // fixme directories before/after files                
                 let patha = a.relpath.split(path.sep);
@@ -129,13 +139,16 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
 
         // build a dictionary of sha512 -> array of files with that digest.
         // we can build a list of files with the same digest at the same time.
-        let digestIndex = new Map();
-        let pathIndex = new Map();
-        let basepathIndex = new Map();
-        let dupsByDigest = new Set();
 
-
-        return new DWDirInfo({ root: dirpath, files, digestIndex, pathIndex, basepathIndex, dupsByDigest });
+        return new DWDirInfo({
+            root: dirpath,
+            files,
+            digestIndex,
+            pathIndex,
+            basepathIndex,
+            dupsByDigest,
+            fileWithErrors
+        });
     } catch (error) {
         throw error;
     }
@@ -160,8 +173,14 @@ async function digestDirectory(dirInfo, onProgress){
         open++;
 
         const fullpath = path.join(basepath, file.relpath);
-        const readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
-        file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
+        let readStream;
+        try {           
+            readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
+            file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
+        } catch (error) {
+            readStream && typeof readStream.close === 'function' && readStream.close();
+            dirInfo.fileWithErrors.add(file.relpath);
+        }
 
         onProgress({current:count, currentMax: files.length, total: count, totalMax: files.length});
         count++;
@@ -572,6 +591,16 @@ async function main(){
         prevDirFileCount += dirInfo.files.length;
     }
     timeConsole.timeEnd("hash");
+
+    let hasFilesWithErrors = dirInfos.reduce((acc, i)=>acc||(i.fileWithErrors.size > 0),false);
+    if (hasFilesWithErrors){
+        timeConsole.log("files with errors:")
+        for (const dirInfo of dirInfos){
+            for (const file of dirInfo.fileWithErrors){
+                timeConsole.log(file);
+            }
+        }
+    }
 
     // Build digest index
     for (const dirInfo of dirInfos){
