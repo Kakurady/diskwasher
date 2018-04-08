@@ -189,16 +189,18 @@ class ConsoleUI extends ThottledUpdater {
           
     }
 
+    filesNotBackedUpToFlatArray(filesArrayOfArray){
+        return flatMap(
+            filesArrayOfArray, 
+            files => files.map(x=>x.relpath)
+        );
+    }
 /**
      * 
      * @param {DWDirInfo[][]} dirInfos 
      */
     showFilesNotBackedUp(filesArrayOfArray){
-        let items = [];
-        items = flatMap(
-            filesArrayOfArray, 
-            files => files.map(x=>x.relpath)
-            );
+        let items = this.filesNotBackedUpToFlatArray(filesArrayOfArray);
 
         this.list = blessed.list({
             top: "0",
