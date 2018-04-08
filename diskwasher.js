@@ -31,10 +31,12 @@ class DWFile{
         this.size = obj.size;
         /** @type {any} */
         this.mtime = obj.mtime;
-        /**
-         * @type {HashType}
-         */
+        /** @type {HashType} */
         this.sha512 = obj.sha512;
+    }
+
+    basepath(){
+        return this.relpath.slice(this.relpath.lastIndexOf(path.sep));
     }
 }
 
@@ -42,8 +44,13 @@ class DWDirInfo{
     constructor(obj){
         /** @type {string} */
         this.root = obj.root;
+        //FIXME unify the two
         /** @type {DWFile[]} */
         this.files = obj.files;
+        /** @type {Map<PathType, DWFile>} */
+        this.pathIndex = obj.pathIndex;
+        /** @type {Map<PathType, DWFile[]>} */
+        this.basepathIndex = obj.pathIndex;
         /** @type {Map<HashType, PathType[]>} */
         this.digestIndex = obj.digestIndex;
         /** @type {Set<HashType>} */
@@ -123,10 +130,12 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
         // build a dictionary of sha512 -> array of files with that digest.
         // we can build a list of files with the same digest at the same time.
         let digestIndex = new Map();
+        let pathIndex = new Map();
+        let basepathIndex = new Map();
         let dupsByDigest = new Set();
 
 
-        return new DWDirInfo({ root: dirpath, files, digestIndex, dupsByDigest });
+        return new DWDirInfo({ root: dirpath, files, digestIndex, pathIndex, basepathIndex, dupsByDigest });
     } catch (error) {
         throw error;
     }
@@ -180,6 +189,7 @@ function buildDigestIndex(dirInfo){
     let files = dirInfo.files;
     let digestIndex = dirInfo.digestIndex;
     let dupsByDigest = dirInfo.dupsByDigest;
+    let basepathIndex = dirInfo.basepathIndex;
 
     for (const kv of files.entries()){
         let i = kv[0];
@@ -190,7 +200,14 @@ function buildDigestIndex(dirInfo){
             dupsByDigest.add(x.sha512);
         }
         names.push(x.relpath);
-        digestIndex.set(x.sha512, names);
+        digestIndex.set(x.sha512, names); 
+
+        dirInfo.pathIndex.set(x.relpath,x);
+
+        let basepath = x.basepath();
+        let basepaths = basepathIndex.get(basepath) || [];
+        basepaths.push(x);
+        basepathIndex.set(basepath, basepaths);
     }
 }
 
@@ -302,7 +319,19 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
             return true;
         });
 
-        return missingFiles;
+        return missingFiles.map(x => {
+            // Is there a file with completely same path?
+            let exactPathMatches = staying.map(s=> s.pathIndex.get(x.relpath)).filter(x=>!!x);
+            if (exactPathMatches[0]){
+                return {file: x, exactMatch: exactPathMatches[0]};
+            }
+            // is there a file in a different path?
+            let similarMatches = staying.map(s=>s.basepathIndex.get(x.basepath)).filter(x=>!!x);
+            if (similarMatches[0]){
+                return {file: x, similarMatches};
+            }
+            return {file: x};
+        });
     });
 }
 

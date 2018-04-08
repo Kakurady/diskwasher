@@ -190,9 +190,11 @@ class ConsoleUI extends ThottledUpdater {
     }
 
     filesNotBackedUpToFlatArray(filesArrayOfArray){
+        let indicator = (x) => x.exactMatch? "x": x.similarMatches? "-": " ";
+
         return flatMap(
             filesArrayOfArray, 
-            files => files.map(x=>x.relpath)
+            files => files.map(x=>`${indicator(x)} ${x.file.relpath}`)
         );
     }
 /**
