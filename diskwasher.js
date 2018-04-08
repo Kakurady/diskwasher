@@ -90,12 +90,18 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
     // step 1: list files under the directory.
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
-    let count = 0;
     let fileWithErrors = new Set();
     let digestIndex = new Map();
     let pathIndex = new Map();
     let basepathIndex = new Map();
     let dupsByDigest = new Set();
+    
+    let count = 0;
+    let currentItem = "";
+    let getState = ()=>{
+        return {current:0, currentMax: count+1, total:0, totalMax: count+1, currentItem}
+    };
+    let stateObj = {getState};
 
     function countSeps(str){
         let count = 0;
@@ -121,7 +127,8 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
             })
             .on("file", (file, stat)=>{
                 let relpath = path.relative(_dirpath, file);
-                onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1, currentItem: relpath});
+                currentItem = relpath;
+                onProgress(stateObj);
                 // if (micromatch.any(file, globsToIgnore, { dot:true }) || micromatch.any(relpath, globsToIgnore, { dot:true })) {
                 //     return;
                 // }
@@ -189,13 +196,22 @@ async function digestDirectory(dirInfo, onProgress){
     let count = 0;
     let open = 0;
 
+    let total = files.length;
+    let currentItem = "";
+
+    let getState = ()=>{
+        return {current:count, currentMax: files.length, total, totalMax: total, currentItem}
+    };
+    let stateObj = {getState};
+
     async function digestFile(basepath, file, onProgress, prev){
         if (testGlobIgnore) {return;}
 
         open++;
 
         const fullpath = path.join(basepath, file.relpath);
-        onProgress({current:count, currentMax: files.length, total: count, totalMax: files.length, currentItem: file.relpath});
+        currentItem = file.relpath;
+        onProgress(stateObj);
         let readStream;
         try {           
             readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
@@ -563,14 +579,24 @@ async function main(){
     function onProgress(obj){
         cui.onChange(obj);
     }
-    function onListProgress(obj){
-        cui.onChange({
+    let progressObj = {};
+    let getListProgressState = ()=>{
+        let obj = (typeof progressObj.getState == "function")?
+             progressObj.getState():
+             progressObj
+        ;
+        return {
             current: obj.current, 
             currentMax: obj.currentMax, 
             total:obj.total,
             totalMax: totalFileCount + obj.totalMax,
             currentItem: obj.currentItem
-         });
+         }
+    };
+    let stateo = { getState:getListProgressState };
+    function onListProgress(obj){
+        progressObj = obj;
+        cui.onChange(stateo);
     }
     
     
@@ -601,14 +627,24 @@ async function main(){
 
     timeConsole.time("hash");
     for (const dirInfo of dirInfos){
-        function onDigestProgress(obj){
-            cui.onChange({
+        let progressObj = {};
+        let getState = ()=>{
+            let obj = (typeof progressObj.getState == "function")?
+                 progressObj.getState():
+                 progressObj
+            ;
+            return {
                 current: obj.current, 
                 currentMax: obj.currentMax, 
                 total:prevDirFileCount + obj.current,
                 totalMax: totalFileCount,
                 currentItem: obj.currentItem
-             });
+            }
+        };
+        let stateo = { getState };
+        function onDigestProgress(obj){
+            progressObj = obj;
+            cui.onChange(stateo);
         }
         // read file content and create sha512 digest
         await digestDirectory(dirInfo, onDigestProgress);
