@@ -127,12 +127,13 @@ class ConsoleUI extends ThottledUpdater {
     doUpdate(){
 
         // TODO: if displaying megabytes, display the current file name so small files don't look it's stuck.
-
-        let total = this.state.total;
-        let totalMax = this.state.totalMax;
+        let state = (typeof this.state.getstate == 'function') && this.state.getstate || this.state;
+        let total = state.total;
+        let totalMax = state.totalMax;
+        let currentItem = state.currentItem || ""
 
         this.progressBar.setProgress(Math.floor(total/totalMax*100));
-        this.line.content = `${total} / ${totalMax}`;
+        this.line.content = `${total} / ${totalMax} ${currentItem}`;
         this.screen.render();
 
     }

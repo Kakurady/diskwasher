@@ -50,7 +50,7 @@ class DWDirInfo{
         /** @type {Map<PathType, DWFile>} */
         this.pathIndex = obj.pathIndex;
         /** @type {Map<PathType, DWFile[]>} */
-        this.basepathIndex = obj.pathIndex;
+        this.basepathIndex = obj.basepathIndex;
         /** @type {Map<HashType, PathType[]>} */
         this.digestIndex = obj.digestIndex;
         /** @type {Set<HashType>} */
@@ -100,16 +100,18 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
                 return res;
             })
             .on("file", (file, stat)=>{
-                onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1});
-                if (micromatch.any(file, globsToIgnore, { dot:true })) {
-                    return;
-                }
-                files.push(new DWFile({
-                    'relpath': path.relative(_dirpath, file),
+                let relpath = path.relative(_dirpath, file);
+                onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1, currentItem: relpath});
+                // if (micromatch.any(file, globsToIgnore, { dot:true }) || micromatch.any(relpath, globsToIgnore, { dot:true })) {
+                //     return;
+                // }
+                let newFile = new DWFile({
+                    'relpath': relpath,
                     'size': stat.size,
                     'mtime': stat.mtime,
                     'sha512': null
-                })); 
+                });
+                files.push(newFile); 
                 count++;
             })
             .on("error", (er, entry, stat)=>{
@@ -173,6 +175,7 @@ async function digestDirectory(dirInfo, onProgress){
         open++;
 
         const fullpath = path.join(basepath, file.relpath);
+        onProgress({current:count, currentMax: files.length, total: count, totalMax: files.length, currentItem: file.relpath});
         let readStream;
         try {           
             readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
@@ -182,7 +185,6 @@ async function digestDirectory(dirInfo, onProgress){
             dirInfo.fileWithErrors.add(file.relpath);
         }
 
-        onProgress({current:count, currentMax: files.length, total: count, totalMax: files.length});
         count++;
 
         open--;
@@ -546,7 +548,8 @@ async function main(){
             current: obj.current, 
             currentMax: obj.currentMax, 
             total:obj.total,
-            totalMax: totalFileCount + obj.totalMax
+            totalMax: totalFileCount + obj.totalMax,
+            currentItem: obj.currentItem
          });
     }
     
@@ -583,7 +586,8 @@ async function main(){
                 current: obj.current, 
                 currentMax: obj.currentMax, 
                 total:prevDirFileCount + obj.current,
-                totalMax: totalFileCount
+                totalMax: totalFileCount,
+                currentItem: obj.currentItem
              });
         }
         // read file content and create sha512 digest
