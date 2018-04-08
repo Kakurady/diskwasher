@@ -10,9 +10,14 @@ const hasha = require("hasha");
 const memoryStreams = require("memory-streams");
 const walker = require("walker");
 const yargs = require("yargs");
+const micromatch = require("micromatch");
 require ("intl-pluralrules");
 
 const ConsoleUI = require ("./console-ui");
+
+//glob debugging
+const testGlobIgnore = false;
+let directoriesTested = [];
 
 /** @typedef {string} HashType 
  *  @typedef {string} PathType
@@ -48,11 +53,14 @@ class DWDirInfo{
 
 /**
  * // list files, digest files, build map of hash and list of duplicates
- * @param {string} dirpath 
+ * @param {string} dirpath (already normalized)
+ * @param {string[]} globsToIgnore
  * @param {*} onProgress 
  */
-async function doDirectory(dirpath, onProgress){
-    
+async function doDirectory(dirpath, globsToIgnore, onProgress){
+    let dirGlobs = [...globsToIgnore, ...[...globsToIgnore]
+            .filter(x => x.endsWith(path.sep))
+            .map(x => x.slice(0, -1))];
     // step 1: list files under the directory.
     // TODO: I want a progress indicator while reading
     // TODO: want file size for each file, so I can display a progress for large files. 
@@ -71,8 +79,16 @@ async function doDirectory(dirpath, onProgress){
             /**@type DWFile[] */
             let files = [];
             walker(_dirpath)
+            .filterDir( (dir)=>{
+                let res = ! micromatch.any(dir, dirGlobs, { dot:true })
+                if (testGlobIgnore){ directoriesTested.push(`${res}, ${dir}`); }
+                return res;
+            })
             .on("file", (file, stat)=>{
                 onProgress({current:0, currentMax: count+1, total: 0, totalMax:count+1});
+                if (micromatch.any(file, globsToIgnore, { dot:true })) {
+                    return;
+                }
                 files.push(new DWFile({
                     'relpath': path.relative(_dirpath, file),
                     'size': stat.size,
@@ -116,25 +132,6 @@ async function doDirectory(dirpath, onProgress){
     }
 }
 
-async function digestFile(basepath, file, onProgress, prev){
-    const fullpath = path.join(basepath, file.relpath);
-    if (file.size > 1024*1024) { await prev; }
-    try {
-        const readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
-        try {
-            file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
-        } catch (error) {
-            nodeConsole.error(error);
-            readStream.close();
-        }
-    } catch (error) {          
-        nodeConsole.error(error);
-    }
-
-    
-    await prev;
-}
-
 /**
  * 
  * @param {DWDirInfo} dirInfo 
@@ -149,6 +146,8 @@ async function digestDirectory(dirInfo, onProgress){
     let open = 0;
 
     async function digestFile(basepath, file, onProgress, prev){
+        if (testGlobIgnore) {return;}
+
         open++;
 
         const fullpath = path.join(basepath, file.relpath);
@@ -289,7 +288,8 @@ function ImTakingTheHDDAwayWithMe(going, staying) {
     return going.map(function(dirInfo) {
         let missingFiles = [...dirInfo.files].filter(file => {
             if (
-                !file.sha512 ||
+                ( !testGlobIgnore ) && 
+                ( !file.sha512 ) ||
                 staying
                     .map(otherDirInfo =>
                         otherDirInfo.digestIndex.has(file.sha512)
@@ -445,12 +445,44 @@ async function main(){
             normalize: true,
             nargs: 1,
             desc: "filename to output results to. if empty, will display result"
+        }, 
+        "ignore": {
+            alias: 'i',
+            desc: "path to ignore. Can use glob patterns in micromatch format. Can specify multiple patterns by repeating the option."
         }
     }).argv;
-    // DEBUG: log argument parsing output
-    timeConsole.log(JSON.stringify(yargv, null, "  "));
     //.command('*', 'showNotBackedUp')
+
+    // DEBUG: log argument parsing output
+    timeConsole.log("parsed arguments:", JSON.stringify(yargv, null, "  "));
+
+   // fixme: functionalize this already
+   /**
+    * probably an array.
+    */
+   let ignoredPaths = 
+   (!yargv.ignore)? 
+       [] :
+       (typeof yargv.ignore == 'string')? 
+           [yargv.ignore]:
+           yargv.ignore;
+
+    timeConsole.debug("ignored Paths:", JSON.stringify(ignoredPaths, null, "  "));
     
+    let dirGlobs = [...ignoredPaths, ...[...ignoredPaths]
+    .filter(x => x.endsWith(path.sep))
+    .map(x => x.slice(0, -1))];
+    timeConsole.debug("directory glob patterns:", JSON.stringify(dirGlobs, null, "  "));
+
+    // test if glob patterns are valid (of course they are)
+    [...ignoredPaths].map(x=>{
+        try {
+            return micromatch.matcher(x);
+        } catch (error) {
+            console.warn(`unable to compile pattern "${x}".`)
+        }
+    });
+
     let directoryPaths = yargv._;
 
     let cui = new ConsoleUI();
@@ -478,7 +510,7 @@ async function main(){
     for (const directoryPath of directoryPaths){
         try {
             // list files in each directory
-            const dirInfo = await doDirectory(directoryPath, onListProgress);
+            const dirInfo = await doDirectory(directoryPath, ignoredPaths, onListProgress);
             dirInfos.push( dirInfo );
             totalFileCount += dirInfo.files.length;
         } catch (error) {
@@ -488,6 +520,10 @@ async function main(){
         
     }
     timeConsole.timeEnd("listfiles");
+    if(testGlobIgnore){
+        timeConsole.debug("directories tested:", JSON.stringify(directoriesTested, null, "  "));
+    }
+    
 
 
     totalFileCount = dirInfos.reduce((acc, x) => acc + x.files.length, 0);
