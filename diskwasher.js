@@ -11,12 +11,11 @@ const memoryStreams = require("memory-streams");
 const walker = require("walker");
 const yargs = require("yargs");
 const micromatch = require("micromatch");
-require ("intl-pluralrules");
 
 const ConsoleUI = require ("./console-ui");
 
 //glob debugging
-const testGlobIgnore = false;
+let testGlobIgnore = false;
 let directoriesTested = [];
 
 /** @typedef {string} HashType 
@@ -535,6 +534,10 @@ async function main(){
         "ignore": {
             alias: 'i',
             desc: "path to ignore. Can use glob patterns in micromatch format. Can specify multiple patterns by repeating the option."
+        },
+        "debugFileListing":{
+            type:'boolean',
+            hidden: true
         }
     }).argv;
     //.command('*', 'showNotBackedUp')
@@ -542,6 +545,9 @@ async function main(){
     // DEBUG: log argument parsing output
     timeConsole.log("parsed arguments:", JSON.stringify(yargv, null, "  "));
 
+    if ('debugFileListing' in yargv){
+        testGlobIgnore = yargv.debugFileListing;
+    }
    // fixme: functionalize this already
    /**
     * probably an array.

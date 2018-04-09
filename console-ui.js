@@ -249,9 +249,14 @@ class ConsoleUI extends ThottledUpdater {
 }
 
 function _flatMap(arr, func){
-    return arr
-    .map(func)
-    .reduce((acc, it)=>{acc.push(...it);return acc;}, []);
+    let acc = [];
+    let res = arr.map(func);
+    for (const item of res){
+        for (const x of item){
+            acc.push(x);
+        }
+    }
+    return acc;
 }
 function flatMap(arr, func){
     return arr.flatMap && arr.flatMap(func) || _flatMap(arr, func);
