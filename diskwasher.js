@@ -102,6 +102,21 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
     };
     let stateObj = {getState};
 
+    let pathcompare = (a,b)=>{
+        // fixme directories before/after files                
+        let patha = a.relpath.split(path.sep);
+        let pathb = b.relpath.split(path.sep);
+
+        while (patha[0].localeCompare(pathb[0]) == 0){
+            patha.shift();
+            pathb.shift();
+        }
+        //console.log(patha, pathb);
+        if (patha.length == 1 && pathb.length == 1){ return a.relpath.localeCompare(b.relpath);;}
+        if (patha.length == 1){ return -1;}
+        if (pathb.length == 1){ return 1;}
+        return a.relpath.localeCompare(b.relpath);
+    };
     function countSeps(str){
         let count = 0;
         for (const char of str){
@@ -143,23 +158,7 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
             .on("error", (er, entry, stat)=>{
                 fileWithErrors.add(entry);
             }) // FIXME do something with errors
-            .on('end', ()=>resolve(files.sort((a,b)=>{
-                // fixme directories before/after files                
-                let patha = a.relpath.split(path.sep);
-                let pathb = b.relpath.split(path.sep);
-
-                while (patha[0].localeCompare(pathb[0]) == 0){
-                    patha.shift();
-                    pathb.shift();
-                }
-                //console.log(patha, pathb);
-                if (patha.length == 1 && pathb.length == 1){ return a.relpath.localeCompare(b.relpath);;}
-                if (patha.length == 1){ return -1;}
-                if (pathb.length == 1){ return 1;}
-                return a.relpath.localeCompare(b.relpath);
-            }
-                // FIXME compare asciibetcally
-            )));
+            .on('end', ()=>resolve(files.sort(pathcompare)));
         });
     }
     try {
