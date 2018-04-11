@@ -1,4 +1,4 @@
-const blessed = require('blessed');
+import blessed from 'blessed';
 
 class ThottledUpdater{
     
@@ -262,4 +262,4 @@ function flatMap(arr, func){
     return arr.flatMap && arr.flatMap(func) || _flatMap(arr, func);
 }
 
-module.exports = ConsoleUI;
+export { ConsoleUI as default };

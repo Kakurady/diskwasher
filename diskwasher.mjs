@@ -1,18 +1,18 @@
 "use strict";
-const crypto = require("crypto");
-const fs = require("fs");
-const util = require("util");
-const nodeConsole = require("console");
-const path = require("path");
+import crypto from "crypto";
+import fs from "fs";
+import util from "util";
+import nodeConsole from "console";
+import path from "path";
 
-const hasha = require("hasha");
+import hasha  from "hasha";
 // FIXME use stream-buffers instead, less dependency
-const memoryStreams = require("memory-streams");
-const walker = require("walker");
-const yargs = require("yargs");
-const micromatch = require("micromatch");
+import memoryStreams from "memory-streams";
+import walker from "walker";
+import yargs from "yargs";
+import micromatch from "micromatch";
 
-const ConsoleUI = require ("./console-ui");
+import ConsoleUI from "./console-ui";
 
 //glob debugging
 let testGlobIgnore = false;
@@ -71,10 +71,10 @@ async function doDirectory(dirpath, globsToIgnore, onProgress){
             .map(x => x.slice(0, -1))];
 
     let dirMatchers = dirGlobs.map(x =>
-        micromatch.matcher(x, { dot: true })
+       micromatch.matcher(x, { dot: true })
     );
     let fileMatchers = globsToIgnore.map(x =>
-        micromatch.matcher(x, { dot: true })
+       micromatch.matcher(x, { dot: true })
     );
 
     /**
@@ -286,22 +286,7 @@ function printDuplicates(dirInfo){
         console.log(`no duplicates in ${dirInfo.root}.`)
     }
 }
-function printDuplicates(dirInfo){
-    // printing duplicates.
-    if (dirInfo.dupsByDigest.size > 0){
-        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
-        for (const dup of dirInfo.dupsByDigest){
-            let fnames = dirInfo.digestIndex.get(dup);
-            console.log(dup);
-            for (const name of fnames){
-                console.log("\t",name);
-            }
-        }
-        console.log("");
-    } else {
-        console.log(`no duplicates in ${dirInfo.root}.`)
-    }
-}
+
 /**
  * 
  * @param {DWDirInfo} left 
@@ -523,7 +508,7 @@ async function main(){
     
     //await testDirectoriesAreStatable(directoryPaths);
     let yargv = 
-    yargs.options({
+        yargs.options({
         'output': {
             alias: 'o',
             normalize: true,
