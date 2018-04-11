@@ -13,6 +13,7 @@ const yargs = require("yargs");
 const micromatch = require("micromatch");
 
 const ConsoleUI = require ("./console-ui");
+const DWCache = require("./cache");
 
 //glob debugging
 let testGlobIgnore = false;
@@ -517,6 +518,8 @@ let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwri
 }
 
 async function main(){
+    const cache = new DWCache();
+
     // first test input?
     let bufOutputStream = new memoryStreams.WritableStream();
     let timeConsole = new nodeConsole.Console(bufOutputStream);
@@ -537,6 +540,11 @@ async function main(){
         "debugFileListing":{
             type:'boolean',
             hidden: true
+        },
+        "cacheFile":{
+            alias: 'cachefile',
+            normalize: true,
+            nargs: 1,
         }
     }).argv;
     //.command('*', 'showNotBackedUp')
@@ -716,6 +724,17 @@ async function main(){
         await cui.finish();
     }
     console.log(bufOutputStream.toString());
+
+    if (yargv.cacheFile){
+        try {
+            cache.set("test");
+            console.log("writing out to cache...");
+            await write_pp3("", yargv.cacheFile, cache.toString());            
+            console.log("cache written");
+        } catch (error) {
+            console.log(`error writing cache: ${error}`);
+        }
+    }
 
 }
 main().catch(err => {throw err});
