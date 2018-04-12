@@ -240,7 +240,7 @@ async function digestDirectory(dirInfo, onProgress){
         }
 
         count++;
-        cache.putFile(fullpath, file);
+        // cache.putFile(fullpath, file);
 
         open--;
     }
@@ -758,8 +758,13 @@ async function main(){
 
     if (yargv.cacheFile){
         try {
-            console.log("writing out to cache...");
-            await write_pp3("", yargv.cacheFile, cache.toString());            
+            console.log("updating cache...");
+            let newCache = new DWCache();
+            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+            newCache.fromString(text);
+
+            newCache.set(dirInfos);
+            await write_pp3("", yargv.cacheFile, newCache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);
