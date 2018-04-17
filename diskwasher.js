@@ -217,7 +217,7 @@ async function digestDirectory(dirInfo, onProgress){
         currentItem = file.relpath;
         onProgress(stateObj);
 
-        let cached = cache.getFile(fullpath);
+        let cached = await cache.getFile(fullpath);
         if (cached){
             //fixme: do something about mtime.
             let mtime = file.mtime.getTime();
@@ -783,7 +783,7 @@ async function main(){
                 outcache = cache;
                 cache.set(dirInfos);
             }
-            await write_pp3("", yargv.jsonCache, outcache.toString());            
+            // await write_pp3("", yargv.jsonCache, outcache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);

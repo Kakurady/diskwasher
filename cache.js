@@ -16,7 +16,7 @@ class DWCache {
         if (!filename) {filename = ":memory:";}
         this.filename = filename;
         const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
-        /**@type {Database} */
+        /**@type {sqlite.Database} */
         this[_db] = sqlite.open(filename, {cached: true})
         .then(db => 
             db.migrate({migrationsPath})
@@ -35,8 +35,19 @@ class DWCache {
         return JSON.stringify({version: version, files:[...this[_store].files.entries()]}, null, "\t");
     }
 
-    getFile(fullpath){
-        return this[_store].files.get(fullpath);
+    async getFile(fullpath){
+        // return this[_store].files.get(fullpath);
+        const sql = `
+        Select * 
+        From "files"
+        Where "fullpath" = $fullpath
+            And ( ($mtime Isnull ) OR "mtime" = $mtime )
+        ;
+        `
+        /**@type {sqlite.Database} */
+        let db = await this[_db];
+        let res = await db.get(sql, {$fullpath: fullpath})
+        return res;
     }
 
     async putFile(fullpath, file){
