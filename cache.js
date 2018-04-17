@@ -1,5 +1,7 @@
 const _store = Symbol();
 const path = require('path');
+const sqlite = require('sqlite');
+
 const version = 1;
 class DWCache {
     constructor() {
