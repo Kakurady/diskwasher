@@ -14,7 +14,7 @@ const micromatch = require("micromatch");
 
 const ConsoleUI = require ("./console-ui");
 const DWCache = require("./cache");
-const cache = new DWCache();
+let cache = new DWCache();
 //glob debugging
 let testGlobIgnore = false;
 let directoriesTested = [];
@@ -561,6 +561,12 @@ async function main(){
             type:'boolean',
             hidden: true
         },
+        "jsonCache":{
+            alias: 'jsoncache',
+            normalize: true,
+            nargs: 1,
+            hidden: true
+        },
         "cacheFile":{
             alias: 'cachefile',
             normalize: true,
@@ -601,12 +607,14 @@ async function main(){
             console.warn(`unable to compile pattern "${x}".`)
         }
     });
-
     if (yargv.cacheFile){
+        cache = new DWCache(yargv.cacheFile);
+    }
+    if (yargv.jsonCache){
         try {
             console.log(`reading cache...`);
 
-            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+            let text = await util.promisify(fs.readFile)(yargv.jsonCache, {encoding: "utf8"});
             cache.fromString(text);
         } catch (error) {
             console.log(`error reading cache: ${error}`);
@@ -760,13 +768,13 @@ async function main(){
     }
     console.log(bufOutputStream.toString());
 
-    if (yargv.cacheFile){
+    if (yargv.jsonCache){
         try {
             console.log("updating cache...");
             let newCache = new DWCache();
             let outcache = newCache;
             try{
-                let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+                let text = await util.promisify(fs.readFile)(yargv.jsonCache, {encoding: "utf8"});
                 newCache.fromString(text);
     
                 newCache.set(dirInfos);
@@ -775,7 +783,7 @@ async function main(){
                 outcache = cache;
                 cache.set(dirInfos);
             }
-            await write_pp3("", yargv.cacheFile, outcache.toString());            
+            await write_pp3("", yargv.jsonCache, outcache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);
