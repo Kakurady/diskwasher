@@ -14,8 +14,11 @@ class DWCache {
         };
 
         if (!filename) {filename = ":memory:";}
-
-        this[_db] = sqlite.open(filename, {cached: true});
+        const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
+        this[_db] = sqlite.open(filename, {cached: true})
+        .then(db => 
+            db.migrate({migrationsPath})
+        );
     }
 
     fromString(str) {
