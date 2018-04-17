@@ -653,6 +653,10 @@ async function main(){
             // list files in each directory
             const dirInfo = await doDirectory(directoryPath, ignoredPaths, onListProgress);
             dirInfos.push( dirInfo );
+
+            //immediately calculate progress before changing total file count. 
+            // Prevents count temporarily jumping up at the end of listing one directory
+            cui.onChange(stateo.getState());
             totalFileCount += dirInfo.files.length;
         } catch (error) {
             throw error;
@@ -760,11 +764,18 @@ async function main(){
         try {
             console.log("updating cache...");
             let newCache = new DWCache();
-            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
-            newCache.fromString(text);
-
-            newCache.set(dirInfos);
-            await write_pp3("", yargv.cacheFile, newCache.toString());            
+            let outcache = newCache;
+            try{
+                let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+                newCache.fromString(text);
+    
+                newCache.set(dirInfos);
+            } catch (error){
+                console.log("error reading cache, using current cache");
+                outcache = cache;
+                cache.set(dirInfos);
+            }
+            await write_pp3("", yargv.cacheFile, outcache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);
