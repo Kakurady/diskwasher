@@ -608,7 +608,11 @@ async function main(){
         }
     });
     if (yargv.cacheFile){
-        cache = new DWCache(yargv.cacheFile);
+        try {
+            cache = new DWCache(yargv.cacheFile);
+        } catch (error) {
+            console.log(`error opening cache: ${error}`);
+        }
     }
     if (yargv.jsonCache){
         try {

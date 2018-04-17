@@ -18,6 +18,7 @@ class DWCache {
         const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
         /**@type {sqlite.Database} */
         this[_db] = sqlite.open(filename, {cached: true})
+        .then(db=> db.exec("pragma journal_mode = wal;"))
         .then(db => 
             db.migrate({migrationsPath})
         );
@@ -107,7 +108,7 @@ class DWCache {
 
     async close(){
         const db = await this[_db];
-        
+        await db.run("Pragma optimize");
         return db.close();
     }
 }
