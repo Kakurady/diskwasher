@@ -29,7 +29,11 @@ class DWCache {
         if (parsed.version != version){
             throw "cache version isn't right";
         }
-        this[_store].files = new Map(parsed.files);
+        for (const file of parsed.files){
+            let fullpath = file[0];
+            let {size, mtime, sha512} = file[1];
+            this.putFile(fullpath, {size, mtime: new Date(mtime),sha512});
+        }
     }
     toString() {
         return JSON.stringify({version: version, files:[...this[_store].files.entries()]}, null, "\t");
@@ -47,7 +51,14 @@ class DWCache {
         /**@type {sqlite.Database} */
         let db = await this[_db];
         let res = await db.get(sql, {$fullpath: fullpath})
-        return res;
+        // fixme object shape
+        if (!res) {return;}
+        return {
+            fullpath: res.fullpath,
+            size: res.size,
+            mtime: new Date(res.mtime * 1000 + res.mtime_frac),
+            sha512: res.sha512.toString("base64")
+        };
     }
 
     async putFile(fullpath, file){
