@@ -781,7 +781,11 @@ async function main(){
             console.log(`error writing cache: ${error}`);
         }
     }
-
+    try{
+        await cache.close();
+    } catch (error) {
+        console.log(`error closing database: ${error}`);
+    }
 }
 main().catch(err => {throw err});
 

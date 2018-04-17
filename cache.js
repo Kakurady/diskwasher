@@ -1,13 +1,21 @@
+"use strict";
+
 const _store = Symbol();
+const _db = Symbol();
 const path = require('path');
 const sqlite = require('sqlite');
 
 const version = 1;
 class DWCache {
-    constructor() {
+    /** @type {string} filename */
+    constructor(filename) {
         this[_store] = {
             files: new Map()
         };
+
+        if (!filename) {filename = ":memory:";}
+
+        this[_db] = sqlite.open(filename, {cached: true});
     }
 
     fromString(str) {
@@ -40,6 +48,12 @@ class DWCache {
                 this.putFile(path.join(dirInfo.root, file.relpath), file);
             }
         }
+    }
+
+    async close(){
+        /**@type {Database} */
+        const db = await this[_db];
+        return db.close();
     }
 }
 
