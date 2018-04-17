@@ -14,7 +14,7 @@ import micromatch from "micromatch";
 
 import ConsoleUI from "./console-ui";
 import DWCache from "./cache";
-
+const cache = new DWCache();
 //glob debugging
 let testGlobIgnore = false;
 let directoriesTested = [];
@@ -203,24 +203,44 @@ async function digestDirectory(dirInfo, onProgress){
     };
     let stateObj = {getState};
 
+    /**
+     * 
+     * @param {PathType} basepath 
+     * @param {DWFile} file 
+     * @param {*} onProgress 
+     * @param {Promise<void>|null} prev 
+     */
     async function digestFile(basepath, file, onProgress, prev){
         if (testGlobIgnore) {return;}
-
-        open++;
 
         const fullpath = path.join(basepath, file.relpath);
         currentItem = file.relpath;
         onProgress(stateObj);
+
+        let cached = cache.getFile(fullpath);
+        if (cached){
+            //fixme: do something about mtime.
+            let mtime = file.mtime.getTime();
+            if (file.size == cached.size){
+                file.sha512 = cached.sha512;
+                count++;
+                return;
+            }
+        }
+
+        open++;
+
         let readStream;
         try {           
             readStream = fs.createReadStream(fullpath, {highWaterMark: 512*1024});
-            file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512"});
+            file.sha512 = await hasha.fromStream(readStream, {algorithm:"sha512", encoding: 'base64'});
         } catch (error) {
             readStream && typeof readStream.close === 'function' && readStream.close();
             dirInfo.fileWithErrors.add(file.relpath);
         }
 
         count++;
+        // cache.putFile(fullpath, file);
 
         open--;
     }
@@ -503,7 +523,7 @@ let write_pp3 = async function _write_pp3(basepath = "", filename, text, overwri
 }
 
 async function main(){
-    const cache = new DWCache();
+    
 
     // first test input?
     let bufOutputStream = new memoryStreams.WritableStream();
@@ -567,6 +587,17 @@ async function main(){
         }
     });
 
+    if (yargv.cacheFile){
+        try {
+            console.log(`reading cache...`);
+
+            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+            cache.fromString(text);
+        } catch (error) {
+            console.log(`error reading cache: ${error}`);
+        }
+    }
+
     let directoryPaths = yargv._;
 
     let cui = new ConsoleUI();
@@ -607,6 +638,10 @@ async function main(){
             // list files in each directory
             const dirInfo = await doDirectory(directoryPath, ignoredPaths, onListProgress);
             dirInfos.push( dirInfo );
+
+            //immediately calculate progress before changing total file count. 
+            // Prevents count temporarily jumping up at the end of listing one directory
+            cui.onChange(stateo.getState());
             totalFileCount += dirInfo.files.length;
         } catch (error) {
             throw error;
@@ -712,9 +747,20 @@ async function main(){
 
     if (yargv.cacheFile){
         try {
-            cache.set("test");
-            console.log("writing out to cache...");
-            await write_pp3("", yargv.cacheFile, cache.toString());            
+            console.log("updating cache...");
+            let newCache = new DWCache();
+            let outcache = newCache;
+            try{
+                let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+                newCache.fromString(text);
+    
+                newCache.set(dirInfos);
+            } catch (error){
+                console.log("error reading cache, using current cache");
+                outcache = cache;
+                cache.set(dirInfos);
+            }
+            await write_pp3("", yargv.cacheFile, outcache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);
