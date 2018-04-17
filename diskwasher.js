@@ -240,7 +240,7 @@ async function digestDirectory(dirInfo, onProgress){
         }
 
         count++;
-        // cache.putFile(fullpath, file);
+        cache.putFile(fullpath, file);
 
         open--;
     }

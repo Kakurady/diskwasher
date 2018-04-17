@@ -14,7 +14,9 @@ class DWCache {
         };
 
         if (!filename) {filename = ":memory:";}
+        this.filename = filename;
         const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
+        /**@type {Database} */
         this[_db] = sqlite.open(filename, {cached: true})
         .then(db => 
             db.migrate({migrationsPath})
@@ -37,13 +39,41 @@ class DWCache {
         return this[_store].files.get(fullpath);
     }
 
-    putFile(fullpath, file){
+    async putFile(fullpath, file){
         let { size, mtime, sha512 } = file;
         this[_store].files.set(fullpath, {
             size,
             mtime: mtime.getTime(),
             sha512
         });
+
+        /**@type {sqlite.Database} */
+        const db = await this[_db];
+
+        //        Insert Or Replace Into "files" 
+        //("fullpath", "size", "mtime", "mtime_frac", "sha512")
+        //Values ($fullpath, $size, $mtime, $mtime_frac, $sha512);
+        const sql = `
+                Insert Or Replace Into "files" 
+        ("fullpath", "size", "mtime", "mtime_frac", "sha512")
+        Values ($fullpath, $size, $mtime, $mtime_frac, $sha512);
+        `;
+
+        let $mtime = mtime.getTime();
+        let $mtime_frac = mtime % 1000;
+        $mtime = ($mtime - $mtime_frac) / 1000;
+
+        let obj = {
+            $fullpath: fullpath,
+            $size: size,
+            $mtime,
+            $mtime_frac,
+            $sha512: Buffer.from(sha512, "base64")
+        };
+
+        
+        return db.run(sql, obj);
+
     }
     set(obj) {
         for (const dirInfo of obj) {
@@ -54,8 +84,8 @@ class DWCache {
     }
 
     async close(){
-        /**@type {Database} */
         const db = await this[_db];
+        
         return db.close();
     }
 }
