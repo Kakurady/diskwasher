@@ -53,10 +53,13 @@ class DWDirInfo{
         this.basepathIndex = obj.basepathIndex;
         /** @type {Map<HashType, PathType[]>} */
         this.digestIndex = obj.digestIndex;
+
         /** @type {Set<HashType>} */
         this.dupsByDigest = obj.dupsByDigest;
         /** @type {Set<PathType>} */
         this.fileWithErrors = obj.fileWithErrors;
+        /** @type {Number} */
+        this.bytesOccupiedByDuplicateFiles = 0;
     }
 }
 
@@ -274,6 +277,7 @@ function buildDigestIndex(dirInfo){
         let names = digestIndex.get(x.sha512) || [];
         if (names.length>0) {
             dupsByDigest.add(x.sha512);
+            dirInfo.bytesOccupiedByDuplicateFiles += x.size;
         }
         names.push(x.relpath);
         digestIndex.set(x.sha512, names); 
@@ -291,22 +295,6 @@ function buildDigestIndex(dirInfo){
  * 
  * @param {DWDirInfo} dirInfo 
  */
-function printDuplicates(dirInfo){
-    // printing duplicates.
-    if (dirInfo.dupsByDigest.size > 0){
-        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
-        for (const dup of dirInfo.dupsByDigest){
-            let fnames = dirInfo.digestIndex.get(dup);
-            console.log(dup);
-            for (const name of fnames){
-                console.log("\t",name);
-            }
-        }
-        console.log("");
-    } else {
-        console.log(`no duplicates in ${dirInfo.root}.`)
-    }
-}
 function printDuplicates(dirInfo){
     // printing duplicates.
     if (dirInfo.dupsByDigest.size > 0){

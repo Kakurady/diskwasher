@@ -143,14 +143,32 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
+        
         // FIXME: too functional to understand and change, perhaps use nested loops instead.
         let items = [];
-        items = flatMap(
-            dirInfos, 
-            dirInfo => flatMap(
-                [...dirInfo.dupsByDigest], 
-                x=>[x, ...dirInfo.digestIndex.get(x)]
-            ));
+        for (const dirInfo of dirInfos){
+
+            // printing duplicates.
+            if (dirInfo.dupsByDigest.size > 0){
+                items.push(`${dirInfo.dupsByDigest.size} duplicates  in ${dirInfo.root}:`);
+                items.push(`(removing duplicates could free up ${dirInfo.bytesOccupiedByDuplicateFiles} bytes)`);
+                items.push("");
+                
+                for (const dup of dirInfo.dupsByDigest){
+                    let fnames = dirInfo.digestIndex.get(dup);
+                    items.push(dup);
+                    for (const name of fnames){
+                        items.push(`\t${name}`);
+                    }
+                }
+                items.push("");
+            } else {
+                items.push(`no duplicates in ${dirInfo.root}.`)
+                items.push("");
+            }
+   
+        }
+        
 
         this.list = blessed.list({
             top: "0",
