@@ -544,8 +544,8 @@ async function main(){
     let bufOutputStream = new memoryStreams.WritableStream();
     let timeConsole = new nodeConsole.Console(bufOutputStream);
     
-    //await testDirectoriesAreStatable(directoryPaths);
-    let yargv = 
+    let command = "";
+    let yargv = {};
     yargs.options({
         'output': {
             alias: 'o',
@@ -566,10 +566,14 @@ async function main(){
             normalize: true,
             nargs: 1,
         }
-    }).argv;
-    //.command('*', 'showNotBackedUp')
+    })
+    .command(['findDuplicates [directories..]', 'fd', 'ddp'],"find duplicates",  () => { }, (argv) => { command = "findDuplicates";  yargv = argv;})
+    .command(['* [directories..]', "showNotBackedUp"], "show files not backed up", () => { }, (argv) => { command = "showFilesNotBackedUp"; yargv = argv;})
+    .argv;
+    //
 
     // DEBUG: log argument parsing output
+    timeConsole.log("command:", command);
     timeConsole.log("parsed arguments:", JSON.stringify(yargv, null, "  "));
 
     if ('debugFileListing' in yargv){
@@ -613,7 +617,7 @@ async function main(){
         }
     }
 
-    let directoryPaths = yargv._;
+    let directoryPaths = yargv.directories || [];
 
     let cui = new ConsoleUI();
 
@@ -711,49 +715,57 @@ async function main(){
         buildDigestIndex(dirInfo);
     }
 
-    // print duplicates (which is convienently built at the same time as digest index)
-    // for (const dirInfo of dirInfos){
-    //     printDuplicates(dirInfo);
-    // }
-    // print duplicates on terminal instead
-    // cui.showDuplicates(dirInfos);
+    if (command === "findDuplicates"){
+        // print duplicates (which is convienently built at the same time as digest index)
+        // for (const dirInfo of dirInfos){
+        //     printDuplicates(dirInfo);
+        // }
+
+        // print duplicates on terminal instead
+        cui.showDuplicates(dirInfos);
+        timeConsole.timeEnd("Program");
     
-
-    // Find misplaced files
-    //let misplacedFiles = findMisplacedFiles(dirInfos);
-    //let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
-    //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);    
-    
-    let notBackedUpFiles = ImTakingTheHDDAwayWithMe([...dirInfos.slice(0,1)],[...dirInfos.slice(1)]);
-    // let _outFile = yargv.output;
-    if (yargv.output){
-        try {
-            // turn file into array
-            let arr = cui.filesNotBackedUpToFlatArray(notBackedUpFiles);
-            // turn array into string
-            let str = arr.join("\n");
-            // write string to file
-
-            let backup_copied = await write_pp3("", yargv.output, str);
-            cui.destroy();
-            if (backup_copied){
-                timeConsole.info(`Files not backed up report overwritten to ${yargv.output}. Previous content of output file moved to backup.`);
-            } else {
-                timeConsole.info(`Files not backed up report written to ${yargv.output}`);
-            }
-        } catch (error) {
-            cui.destroy();
-            console.error(error);
-        }
-
-    } else {
-        cui.showFilesNotBackedUp(notBackedUpFiles);
-    }
-    timeConsole.timeEnd("Program");
-
-    if (!yargs.output){
         await cui.finish();
+    // } else if () {
+        // Find misplaced files
+        //let misplacedFiles = findMisplacedFiles(dirInfos);
+        //let joined = [... filter(join(...hashes), x=>x[0].relpath != x[1].relpath)];
+        //console.log(`${misplacedFiles.length} files with different paths:`, misplacedFiles);  
+    } else if (command === "showFilesNotBackedUp"){
+        let notBackedUpFiles = ImTakingTheHDDAwayWithMe([...dirInfos.slice(0,1)],[...dirInfos.slice(1)]);
+        // let _outFile = yargv.output;
+        if (yargv.output){
+            try {
+                // turn file into array
+                let arr = cui.filesNotBackedUpToFlatArray(notBackedUpFiles);
+                // turn array into string
+                let str = arr.join("\n");
+                // write string to file
+    
+                let backup_copied = await write_pp3("", yargv.output, str);
+                cui.destroy();
+                if (backup_copied){
+                    timeConsole.info(`Files not backed up report overwritten to ${yargv.output}. Previous content of output file moved to backup.`);
+                } else {
+                    timeConsole.info(`Files not backed up report written to ${yargv.output}`);
+                }
+            } catch (error) {
+                cui.destroy();
+                console.error(error);
+            }
+    
+        } else {
+            cui.showFilesNotBackedUp(notBackedUpFiles);
+        }
+        timeConsole.timeEnd("Program");
+    
+        if (!yargs.output){
+            await cui.finish();
+        }
     }
+
+  
+    
     console.log(bufOutputStream.toString());
 
     if (yargv.cacheFile){

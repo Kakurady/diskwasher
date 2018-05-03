@@ -143,6 +143,7 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
+        // FIXME: too functional to understand and change, perhaps use nested loops instead.
         let items = [];
         items = flatMap(
             dirInfos, 
