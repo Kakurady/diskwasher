@@ -1,4 +1,6 @@
 const blessed = require('blessed');
+const byteSize = require('byte-size');
+const os_platform = require('os').platform;
 
 class ThottledUpdater{
     
@@ -143,20 +145,26 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
-        
-        // FIXME: too functional to understand and change, perhaps use nested loops instead.
+        const bsOpts = {
+            units: os_platform() == 'win32'? 'iec': 'metric'
+        };
+
         let items = [];
         for (const dirInfo of dirInfos){
 
             // printing duplicates.
             if (dirInfo.dupsByDigest.size > 0){
-                items.push(`${dirInfo.dupsByDigest.size} duplicates  in ${dirInfo.root}:`);
-                items.push(`(removing duplicates could free up ${dirInfo.bytesOccupiedByDuplicateFiles} bytes)`);
+                items.push(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
+                items.push(`(removing duplicates could free up ${byteSize(dirInfo.bytesOccupiedByDuplicateFiles, bsOpts)})`);
                 items.push("");
                 
-                for (const dup of dirInfo.dupsByDigest){
-                    let fnames = dirInfo.digestIndex.get(dup);
-                    items.push(dup);
+                for (const dupHash of dirInfo.dupsByDigest){
+                    let fnames = dirInfo.digestIndex.get(dupHash);
+                    let file = dirInfo.pathIndex.get(fnames[0]);
+                    let fsize = file.size;
+                    items.push(`${dupHash} (${byteSize(fsize, bsOpts)} × ${fnames.length})`);
+
+
                     for (const name of fnames){
                         items.push(`\t${name}`);
                     }

@@ -47,6 +47,7 @@ class DWDirInfo{
         //FIXME unify the two
         /** @type {DWFile[]} */
         this.files = obj.files;
+        
         /** @type {Map<PathType, DWFile>} */
         this.pathIndex = obj.pathIndex;
         /** @type {Map<PathType, DWFile[]>} */
