@@ -209,6 +209,7 @@ class ConsoleUI extends ThottledUpdater {
             items: items
         });
         this.screen.append(this.list);
+        this.list.focus();
         this.screen.render();
 
         this.screen.key('q', function() {
@@ -263,6 +264,7 @@ class ConsoleUI extends ThottledUpdater {
             items: items
         });
         this.screen.append(this.list);
+        this.list.focus();
         this.screen.render();
 
         this.screen.key('q', function() {
