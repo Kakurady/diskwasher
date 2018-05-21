@@ -1,6 +1,8 @@
 const blessed = require('blessed');
 const byteSize = require('byte-size');
 const os_platform = require('os').platform;
+const open = require('opn');
+const path = require('path');
 
 class ThottledUpdater{
     
@@ -236,9 +238,18 @@ class ConsoleUI extends ThottledUpdater {
             let {i, j, k} = {...findItemByIndex(itemIndices, index)};
             let hash = itemIndices[i][j].hash 
             let root = dirInfos[i].root;
-            let path = dirInfos[i].digestIndex.get(hash)[k - 1];
-            selectedItemLine.content = JSON.stringify({i, j, k, hash, root, path});
+            let relpath = dirInfos[i].digestIndex.get(hash)[k - 1];
+            
+            let fullpath = path.join(root, relpath);
+            // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
+            selectedItemLine.content = `Opening... ${relpath} (${hash})`;
             this.screen.render();
+            
+            open(path.join(root, relpath))
+                .then(() => selectedItemLine.content = `Opened ${relpath} (${hash})`)
+                .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex}`)
+                .then(() => this.screen.render());
+            
         });
         this.screen.key('q', function() {
             return this.destroy();
