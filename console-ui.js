@@ -150,8 +150,9 @@ class ConsoleUI extends ThottledUpdater {
         };
 
         let items = [];
+        let itemIndices = [];
         for (const dirInfo of dirInfos){
-
+            let itemIndex = [];
             // printing duplicates.
             if (dirInfo.dupsByDigest.size > 0){
                 items.push(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
@@ -162,8 +163,8 @@ class ConsoleUI extends ThottledUpdater {
                     let fnames = dirInfo.digestIndex.get(dupHash);
                     let file = dirInfo.pathIndex.get(fnames[0]);
                     let fsize = file.size;
+                    itemIndex.push({"line": items.length, hash: dupHash, count: fnames.length + 1});
                     items.push(`${dupHash} (${byteSize(fsize, bsOpts)} × ${fnames.length})`);
-
 
                     for (const name of fnames){
                         items.push(`\t${name}`);
@@ -174,14 +175,19 @@ class ConsoleUI extends ThottledUpdater {
                 items.push(`no duplicates in ${dirInfo.root}.`)
                 items.push("");
             }
-   
+            itemIndices.push(itemIndex);
         }
-        
-
+        let selectedItemLine = blessed.text({
+            bottom: 0,
+            left: 0,
+            height: 1,
+            content: "test",
+        });
+        this.selectedItemLine = selectedItemLine;
         this.list = blessed.list({
             top: "0",
             left: "0",
-            height: "100%",
+            height: "100%-1",
             width: "100%",
             scrollable: true,
             keys: true,
@@ -208,10 +214,32 @@ class ConsoleUI extends ThottledUpdater {
             },
             items: items
         });
+        this.screen.append(this.selectedItemLine);
         this.screen.append(this.list);
         this.list.focus();
         this.screen.render();
 
+        function findItemByIndex(itemIndices, index){
+            for (let i = 0; i < itemIndices.length; i++){
+                let itemIndex = itemIndices[i];
+                for (let j = 0; j < itemIndex.length; j++){
+                    let item = itemIndex[j];
+                    if (index >= item.line && index < (item.line + item.count)){
+                        return {i, j, k : index - item.line};
+                    }
+                }
+            }
+            return {i: -1, j: -1, k: -1};
+        }
+
+        this.list.on('select', function (item, index){
+            let {i, j, k} = {...findItemByIndex(itemIndices, index)};
+            let hash = itemIndices[i][j].hash 
+            let root = dirInfos[i].root;
+            let path = dirInfos[i].digestIndex.get(hash)[k - 1];
+            selectedItemLine.content = JSON.stringify({i, j, k, hash, root, path});
+            this.screen.render();
+        });
         this.screen.key('q', function() {
             return this.destroy();
         });
