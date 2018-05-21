@@ -236,10 +236,16 @@ class ConsoleUI extends ThottledUpdater {
 
         this.list.on('select', function (item, index){
             let {i, j, k} = {...findItemByIndex(itemIndices, index)};
+            if (i < 0 || j < 0 || k < 0) {
+                // nothing valid selected
+                selectedItemLine.content = "";
+                this.screen.render();
+                return;
+            }
             let hash = itemIndices[i][j].hash 
             let root = dirInfos[i].root;
-            let relpath = dirInfos[i].digestIndex.get(hash)[k - 1];
-            
+            let relpath = dirInfos[i].digestIndex.get(hash)[k > 0 ? k - 1 : 0];
+
             let fullpath = path.join(root, relpath);
             // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
             selectedItemLine.content = `Opening... ${relpath} (${hash})`;
