@@ -705,13 +705,35 @@ async function main(){
     }
 
     if (command === "findDuplicates"){
-        // print duplicates (which is convienently built at the same time as digest index)
-        // for (const dirInfo of dirInfos){
-        //     printDuplicates(dirInfo);
-        // }
+        if (yargv.output){
+            try {
+                // turn file into array
+                let {items} = cui.buildDuplicateList(dirInfos);
+                // turn array into string
+                let str = items.join("\n");
+                // write string to file
+    
+                let backup_copied = await write_pp3("", yargv.output, str);
+                cui.destroy();
+                if (backup_copied){
+                    timeConsole.info(`Duplicate file report overwritten to ${yargv.output}. Previous content of output file moved to backup.`);
+                } else {
+                    timeConsole.info(`Duplicate file report written to ${yargv.output}`);
+                }
+            } catch (error) {
+                cui.destroy();
+                console.error(error);
+            }
+    
+        } else {
+            cui.showDuplicates(dirInfos);
+        }
+   
+        if (!yargv.output){
+            await cui.finish();
+        }
 
         // print duplicates on terminal instead
-        cui.showDuplicates(dirInfos);
         timeConsole.timeEnd("Program");
     
         await cui.finish();
@@ -748,7 +770,7 @@ async function main(){
         }
         timeConsole.timeEnd("Program");
     
-        if (!yargs.output){
+        if (!yargv.output){
             await cui.finish();
         }
     }

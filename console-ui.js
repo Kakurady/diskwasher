@@ -147,38 +147,8 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
-        const bsOpts = {
-            units: os_platform() == 'win32'? 'iec': 'metric'
-        };
-
-        let items = [];
-        let itemIndices = [];
-        for (const dirInfo of dirInfos){
-            let itemIndex = [];
-            // printing duplicates.
-            if (dirInfo.dupsByDigest.size > 0){
-                items.push(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
-                items.push(`(removing duplicates could free up ${byteSize(dirInfo.bytesOccupiedByDuplicateFiles, bsOpts)})`);
-                items.push("");
-                
-                for (const dupHash of dirInfo.dupsByDigest){
-                    let fnames = dirInfo.digestIndex.get(dupHash);
-                    let file = dirInfo.pathIndex.get(fnames[0]);
-                    let fsize = file.size;
-                    itemIndex.push({"line": items.length, hash: dupHash, count: fnames.length + 1});
-                    items.push(`${dupHash} (${byteSize(fsize, bsOpts)} × ${fnames.length})`);
-
-                    for (const name of fnames){
-                        items.push(`\t${name}`);
-                    }
-                }
-                items.push("");
-            } else {
-                items.push(`no duplicates in ${dirInfo.root}.`)
-                items.push("");
-            }
-            itemIndices.push(itemIndex);
-        }
+        
+        let { items, itemIndices } = this.buildDuplicateList(dirInfos);
         let selectedItemLine = blessed.text({
             bottom: 0,
             left: 0,
@@ -248,12 +218,12 @@ class ConsoleUI extends ThottledUpdater {
 
             let fullpath = path.join(root, relpath);
             // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
-            selectedItemLine.content = `Opening... ${relpath} (${hash})`;
+            selectedItemLine.content = `Opening... ${relpath} (${hash}) ------`;
             this.screen.render();
             
             open(path.join(root, relpath))
-                .then(() => selectedItemLine.content = `Opened ${relpath} (${hash})`)
-                .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex}`)
+                .then(() => selectedItemLine.content = `Opened ${relpath} (${hash}) ------`)
+                .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
                 .then(() => this.screen.render());
             
         });
@@ -261,6 +231,40 @@ class ConsoleUI extends ThottledUpdater {
             return this.destroy();
         });
           
+    }
+
+    buildDuplicateList(dirInfos) {
+        let items = [];
+        let itemIndices = [];
+        const bsOpts = {
+            units: os_platform() == 'win32' ? 'iec' : 'metric'
+        };
+        for (const dirInfo of dirInfos) {
+            let itemIndex = [];
+            // printing duplicates.
+            if (dirInfo.dupsByDigest.size > 0) {
+                items.push(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
+                items.push(`(removing duplicates could free up ${byteSize(dirInfo.bytesOccupiedByDuplicateFiles, bsOpts)})`);
+                items.push("");
+                for (const dupHash of dirInfo.dupsByDigest) {
+                    let fnames = dirInfo.digestIndex.get(dupHash);
+                    let file = dirInfo.pathIndex.get(fnames[0]);
+                    let fsize = file.size;
+                    itemIndex.push({ "line": items.length, hash: dupHash, count: fnames.length + 1 });
+                    items.push(`${dupHash} (${byteSize(fsize, bsOpts)} × ${fnames.length})`);
+                    for (const name of fnames) {
+                        items.push(`\t${name}`);
+                    }
+                }
+                items.push("");
+            }
+            else {
+                items.push(`no duplicates in ${dirInfo.root}.`);
+                items.push("");
+            }
+            itemIndices.push(itemIndex);
+        }
+        return { items, itemIndices };
     }
 
     filesNotBackedUpToFlatArray(filesArrayOfArray){
