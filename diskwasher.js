@@ -47,16 +47,20 @@ class DWDirInfo{
         //FIXME unify the two
         /** @type {DWFile[]} */
         this.files = obj.files;
+        
         /** @type {Map<PathType, DWFile>} */
         this.pathIndex = obj.pathIndex;
         /** @type {Map<PathType, DWFile[]>} */
         this.basepathIndex = obj.basepathIndex;
         /** @type {Map<HashType, PathType[]>} */
         this.digestIndex = obj.digestIndex;
+
         /** @type {Set<HashType>} */
         this.dupsByDigest = obj.dupsByDigest;
         /** @type {Set<PathType>} */
         this.fileWithErrors = obj.fileWithErrors;
+        /** @type {Number} */
+        this.bytesOccupiedByDuplicateFiles = 0;
     }
 }
 
@@ -274,6 +278,7 @@ function buildDigestIndex(dirInfo){
         let names = digestIndex.get(x.sha512) || [];
         if (names.length>0) {
             dupsByDigest.add(x.sha512);
+            dirInfo.bytesOccupiedByDuplicateFiles += x.size;
         }
         names.push(x.relpath);
         digestIndex.set(x.sha512, names); 
@@ -291,22 +296,6 @@ function buildDigestIndex(dirInfo){
  * 
  * @param {DWDirInfo} dirInfo 
  */
-function printDuplicates(dirInfo){
-    // printing duplicates.
-    if (dirInfo.dupsByDigest.size > 0){
-        console.log(`${dirInfo.dupsByDigest.size} duplicates in ${dirInfo.root}:`);
-        for (const dup of dirInfo.dupsByDigest){
-            let fnames = dirInfo.digestIndex.get(dup);
-            console.log(dup);
-            for (const name of fnames){
-                console.log("\t",name);
-            }
-        }
-        console.log("");
-    } else {
-        console.log(`no duplicates in ${dirInfo.root}.`)
-    }
-}
 function printDuplicates(dirInfo){
     // printing duplicates.
     if (dirInfo.dupsByDigest.size > 0){
@@ -716,13 +705,35 @@ async function main(){
     }
 
     if (command === "findDuplicates"){
-        // print duplicates (which is convienently built at the same time as digest index)
-        // for (const dirInfo of dirInfos){
-        //     printDuplicates(dirInfo);
-        // }
+        if (yargv.output){
+            try {
+                // turn file into array
+                let {items} = cui.buildDuplicateList(dirInfos);
+                // turn array into string
+                let str = items.join("\n");
+                // write string to file
+    
+                let backup_copied = await write_pp3("", yargv.output, str);
+                cui.destroy();
+                if (backup_copied){
+                    timeConsole.info(`Duplicate file report overwritten to ${yargv.output}. Previous content of output file moved to backup.`);
+                } else {
+                    timeConsole.info(`Duplicate file report written to ${yargv.output}`);
+                }
+            } catch (error) {
+                cui.destroy();
+                console.error(error);
+            }
+    
+        } else {
+            cui.showDuplicates(dirInfos);
+        }
+   
+        if (!yargv.output){
+            await cui.finish();
+        }
 
         // print duplicates on terminal instead
-        cui.showDuplicates(dirInfos);
         timeConsole.timeEnd("Program");
     
         await cui.finish();
@@ -759,7 +770,7 @@ async function main(){
         }
         timeConsole.timeEnd("Program");
     
-        if (!yargs.output){
+        if (!yargv.output){
             await cui.finish();
         }
     }
