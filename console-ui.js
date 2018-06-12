@@ -3,6 +3,7 @@ const byteSize = require('byte-size');
 const os_platform = require('os').platform;
 const open = require('opn');
 const path = require('path');
+const trash = require('trash');
 
 class ThottledUpdater{
     
@@ -149,7 +150,7 @@ class ConsoleUI extends ThottledUpdater {
     showDuplicates(dirInfos){
         const cmd_openfile = "Open file";
         const cmd_move_to_trash = "Move to Trash";
-        const cmd_cancel = "Move to Trash";
+        const cmd_cancel = "Cancel";
 
         
         let { items, itemIndices } = this.buildDuplicateList(dirInfos);
@@ -157,7 +158,7 @@ class ConsoleUI extends ThottledUpdater {
             bottom: 0,
             left: 0,
             height: 1,
-            content: "test",
+            content: "test"
         });
         this.selectedItemLine = selectedItemLine;
         this.list = blessed.list({
@@ -281,10 +282,14 @@ class ConsoleUI extends ThottledUpdater {
                     .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
                     .then(() => this.screen.render());
             } else if (item.content == cmd_move_to_trash){
-                selectedItemLine.content = JSON.stringify({ name:item.content, index });
-                this.screen.render();
-            } else if (item.content == "cmd_cancel"){
-                
+                selectedItemLine.content = `Trashing... ${relpath} (${hash}) ------`;
+                trash(path.join(root, relpath))
+                    .then(() => selectedItemLine.content = `Trashed ${relpath} (${hash}) ------`)
+                    .catch(ex => selectedItemLine.content = `Failed to move ${relpath} to trash: ${ex} ------`)
+                    .then(() => this.screen.render());
+
+            } else {
+                // item.content == cmd_cancel, pressed escape, etc
             }
 
         });
