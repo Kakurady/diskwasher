@@ -147,6 +147,10 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
+        const cmd_openfile = "Open file";
+        const cmd_move_to_trash = "Move to Trash";
+        const cmd_cancel = "Move to Trash";
+
         
         let { items, itemIndices } = this.buildDuplicateList(dirInfos);
         let selectedItemLine = blessed.text({
@@ -189,7 +193,6 @@ class ConsoleUI extends ThottledUpdater {
         let contextMenu = blessed.list({
             top: "center",
             left: "center",
-            height: "shrink",
             border: { type: "line" },
             padding: 1,
             keys: true,
@@ -220,7 +223,9 @@ class ConsoleUI extends ThottledUpdater {
             },
             hidden: true,
             items: [
-                "Open file"
+                cmd_openfile,
+                cmd_move_to_trash,
+                cmd_cancel
             ]
         });
         this.screen.append(this.selectedItemLine);
@@ -266,14 +271,21 @@ class ConsoleUI extends ThottledUpdater {
             let root = dirInfos[i].root;
             let relpath = dirInfos[i].digestIndex.get(hash)[k > 0 ? k - 1 : 0];
             
-            // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
-            selectedItemLine.content = `Opening... ${relpath} (${hash}) ------`;
-            this.screen.render();
-            
-            open(path.join(root, relpath))
-                .then(() => selectedItemLine.content = `Opened ${relpath} (${hash}) ------`)
-                .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
-                .then(() => this.screen.render());
+            if (item.content == cmd_openfile){
+                // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
+                selectedItemLine.content = `Opening... ${relpath} (${hash}) ------`;
+                this.screen.render();
+                
+                open(path.join(root, relpath))
+                    .then(() => selectedItemLine.content = `Opened ${relpath} (${hash}) ------`)
+                    .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
+                    .then(() => this.screen.render());
+            } else if (item.content == cmd_move_to_trash){
+                selectedItemLine.content = JSON.stringify({ name:item.content, index });
+                this.screen.render();
+            } else if (item.content == "cmd_cancel"){
+                
+            }
 
         });
         this.screen.key('q', function() {
