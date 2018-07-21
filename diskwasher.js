@@ -14,7 +14,7 @@ const micromatch = require("micromatch");
 
 const ConsoleUI = require ("./console-ui");
 const DWCache = require("./cache");
-const cache = new DWCache();
+let cache = new DWCache();
 //glob debugging
 let testGlobIgnore = false;
 let directoriesTested = [];
@@ -221,7 +221,7 @@ async function digestDirectory(dirInfo, onProgress){
         currentItem = file.relpath;
         onProgress(stateObj);
 
-        let cached = cache.getFile(fullpath);
+        let cached = await cache.getFile(fullpath);
         if (cached){
             //fixme: do something about mtime.
             let mtime = file.mtime.getTime();
@@ -244,7 +244,7 @@ async function digestDirectory(dirInfo, onProgress){
         }
 
         count++;
-        // cache.putFile(fullpath, file);
+        cache.putFile(fullpath, file);
 
         open--;
     }
@@ -550,6 +550,12 @@ async function main(){
             type:'boolean',
             hidden: true
         },
+        "jsonCache":{
+            alias: 'jsoncache',
+            normalize: true,
+            nargs: 1,
+            hidden: true
+        },
         "cacheFile":{
             alias: 'cachefile',
             normalize: true,
@@ -594,12 +600,18 @@ async function main(){
             console.warn(`unable to compile pattern "${x}".`)
         }
     });
-
     if (yargv.cacheFile){
+        try {
+            cache = new DWCache(yargv.cacheFile);
+        } catch (error) {
+            console.log(`error opening cache: ${error}`);
+        }
+    }
+    if (yargv.jsonCache){
         try {
             console.log(`reading cache...`);
 
-            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
+            let text = await util.promisify(fs.readFile)(yargv.jsonCache, {encoding: "utf8"});
             cache.fromString(text);
         } catch (error) {
             console.log(`error reading cache: ${error}`);
@@ -646,6 +658,10 @@ async function main(){
             // list files in each directory
             const dirInfo = await doDirectory(directoryPath, ignoredPaths, onListProgress);
             dirInfos.push( dirInfo );
+
+            //immediately calculate progress before changing total file count. 
+            // Prevents count temporarily jumping up at the end of listing one directory
+            cui.onChange(stateo.getState());
             totalFileCount += dirInfo.files.length;
         } catch (error) {
             throw error;
@@ -779,21 +795,32 @@ async function main(){
     
     console.log(bufOutputStream.toString());
 
-    if (yargv.cacheFile){
+    if (yargv.jsonCache){
         try {
             console.log("updating cache...");
             let newCache = new DWCache();
-            let text = await util.promisify(fs.readFile)(yargv.cacheFile, {encoding: "utf8"});
-            newCache.fromString(text);
-
-            newCache.set(dirInfos);
-            await write_pp3("", yargv.cacheFile, newCache.toString());            
+            let outcache = newCache;
+            try{
+                let text = await util.promisify(fs.readFile)(yargv.jsonCache, {encoding: "utf8"});
+                newCache.fromString(text);
+    
+                newCache.set(dirInfos);
+            } catch (error){
+                console.log("error reading cache, using current cache");
+                outcache = cache;
+                cache.set(dirInfos);
+            }
+            // await write_pp3("", yargv.jsonCache, outcache.toString());            
             console.log("cache written");
         } catch (error) {
             console.log(`error writing cache: ${error}`);
         }
     }
-
+    try{
+        await cache.close();
+    } catch (error) {
+        console.log(`error closing database: ${error}`);
+    }
 }
 main().catch(err => {throw err});
 
