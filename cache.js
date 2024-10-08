@@ -1,11 +1,27 @@
+"use strict";
+
 const _store = Symbol();
+const _db = Symbol();
 const path = require('path');
+const sqlite = require('sqlite');
+
 const version = 1;
 class DWCache {
-    constructor() {
+    /** @type {string} filename */
+    constructor(filename) {
         this[_store] = {
             files: new Map()
         };
+
+        if (!filename) {filename = ":memory:";}
+        this.filename = filename;
+        const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
+        /**@type {sqlite.Database} */
+        this[_db] = sqlite.open(filename, {cached: true})
+        .then(db=> db.exec("pragma journal_mode = wal;"))
+        .then(db => 
+            db.migrate({migrationsPath})
+        );
     }
 
     fromString(str) {
@@ -14,23 +30,73 @@ class DWCache {
         if (parsed.version != version){
             throw "cache version isn't right";
         }
-        this[_store].files = new Map(parsed.files);
+        for (const file of parsed.files){
+            let fullpath = file[0];
+            let {size, mtime, sha512} = file[1];
+            this.putFile(fullpath, {size, mtime: new Date(mtime),sha512});
+        }
     }
     toString() {
         return JSON.stringify({version: version, files:[...this[_store].files.entries()]}, null, "\t");
     }
 
-    getFile(fullpath){
-        return this[_store].files.get(fullpath);
+    async getFile(fullpath){
+        // return this[_store].files.get(fullpath);
+        const sql = `
+        Select * 
+        From "files"
+        Where "fullpath" = $fullpath
+            And ( ($mtime Isnull ) OR "mtime" = $mtime )
+        ;
+        `
+        /**@type {sqlite.Database} */
+        let db = await this[_db];
+        let res = await db.get(sql, {$fullpath: fullpath})
+        // fixme object shape
+        if (!res) {return;}
+        return {
+            fullpath: res.fullpath,
+            size: res.size,
+            mtime: new Date(res.mtime * 1000 + res.mtime_frac),
+            sha512: res.sha512.toString("base64")
+        };
     }
 
-    putFile(fullpath, file){
+    async putFile(fullpath, file){
         let { size, mtime, sha512 } = file;
         this[_store].files.set(fullpath, {
             size,
             mtime: mtime.getTime(),
             sha512
         });
+
+        /**@type {sqlite.Database} */
+        const db = await this[_db];
+
+        //        Insert Or Replace Into "files" 
+        //("fullpath", "size", "mtime", "mtime_frac", "sha512")
+        //Values ($fullpath, $size, $mtime, $mtime_frac, $sha512);
+        const sql = `
+                Insert Or Replace Into "files" 
+        ("fullpath", "size", "mtime", "mtime_frac", "sha512")
+        Values ($fullpath, $size, $mtime, $mtime_frac, $sha512);
+        `;
+
+        let $mtime = mtime.getTime();
+        let $mtime_frac = mtime % 1000;
+        $mtime = ($mtime - $mtime_frac) / 1000;
+
+        let obj = {
+            $fullpath: fullpath,
+            $size: size,
+            $mtime,
+            $mtime_frac,
+            $sha512: Buffer.from(sha512, "base64")
+        };
+
+        
+        return db.run(sql, obj);
+
     }
     set(obj) {
         for (const dirInfo of obj) {
@@ -38,6 +104,12 @@ class DWCache {
                 this.putFile(path.join(dirInfo.root, file.relpath), file);
             }
         }
+    }
+
+    async close(){
+        const db = await this[_db];
+        await db.run("Pragma optimize");
+        return db.close();
     }
 }
 

@@ -3,6 +3,7 @@ const byteSize = require('byte-size');
 const os_platform = require('os').platform;
 const open = require('opn');
 const path = require('path');
+const trash = require('trash');
 
 class ThottledUpdater{
     
@@ -147,13 +148,17 @@ class ConsoleUI extends ThottledUpdater {
      * @param {DWDirInfo[]} dirInfos 
      */
     showDuplicates(dirInfos){
+        const cmd_openfile = "Open file";
+        const cmd_move_to_trash = "Move to Trash";
+        const cmd_cancel = "Cancel";
+
         
         let { items, itemIndices } = this.buildDuplicateList(dirInfos);
         let selectedItemLine = blessed.text({
             bottom: 0,
             left: 0,
             height: 1,
-            content: "test",
+            content: "test"
         });
         this.selectedItemLine = selectedItemLine;
         this.list = blessed.list({
@@ -186,8 +191,47 @@ class ConsoleUI extends ThottledUpdater {
             },
             items: items
         });
+        let contextMenu = blessed.list({
+            top: "center",
+            left: "center",
+            border: { type: "line" },
+            padding: 1,
+            keys: true,
+            mouse: true,
+            // scrollbar:{
+            //     ch: ' ',
+            //     bg: "yellow"
+            // },
+            interactive: true,
+            invertSelected: true,
+            style: {
+                fg: "white",
+                bg: "black",
+                border: {
+                    fg: "white",
+                    bg: "black"
+                },
+                item:
+                {
+                    fg: "white",
+                    bg: "black"
+                },
+
+                selected: {
+                    fg: "white",
+                    bg: "blue"
+                }
+            },
+            hidden: true,
+            items: [
+                cmd_openfile,
+                cmd_move_to_trash,
+                cmd_cancel
+            ]
+        });
         this.screen.append(this.selectedItemLine);
         this.screen.append(this.list);
+        this.screen.append(contextMenu);
         this.list.focus();
         this.screen.render();
 
@@ -204,28 +248,50 @@ class ConsoleUI extends ThottledUpdater {
             return {i: -1, j: -1, k: -1};
         }
 
-        this.list.on('select', function (item, index){
-            let {i, j, k} = {...findItemByIndex(itemIndices, index)};
+        let selectedItem;
+        let selectedIndex;
+
+        this.list.on('select', function (item, index) {
+            selectedItem = item;
+            selectedIndex = index;
+
+            contextMenu.pick(function _pick(contextCommand) {
+                // FIXME: contextCommand is null
+            });
+
+        });
+        contextMenu.on('select', function (item, index){
+            let {i, j, k} = {...findItemByIndex(itemIndices, selectedIndex)};
             if (i < 0 || j < 0 || k < 0) {
                 // nothing valid selected
                 selectedItemLine.content = "";
                 this.screen.render();
                 return;
             }
-            let hash = itemIndices[i][j].hash 
+            let hash = itemIndices[i][j].hash;
             let root = dirInfos[i].root;
             let relpath = dirInfos[i].digestIndex.get(hash)[k > 0 ? k - 1 : 0];
+            
+            if (item.content == cmd_openfile){
+                // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
+                selectedItemLine.content = `Opening... ${relpath} (${hash}) ------`;
+                this.screen.render();
+                
+                open(path.join(root, relpath))
+                    .then(() => selectedItemLine.content = `Opened ${relpath} (${hash}) ------`)
+                    .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
+                    .then(() => this.screen.render());
+            } else if (item.content == cmd_move_to_trash){
+                selectedItemLine.content = `Trashing... ${relpath} (${hash}) ------`;
+                trash(path.join(root, relpath))
+                    .then(() => selectedItemLine.content = `Trashed ${relpath} (${hash}) ------`)
+                    .catch(ex => selectedItemLine.content = `Failed to move ${relpath} to trash: ${ex} ------`)
+                    .then(() => this.screen.render());
 
-            let fullpath = path.join(root, relpath);
-            // selectedItemLine.content = JSON.stringify({i, j, k, hash, root, relpath});
-            selectedItemLine.content = `Opening... ${relpath} (${hash}) ------`;
-            this.screen.render();
-            
-            open(path.join(root, relpath))
-                .then(() => selectedItemLine.content = `Opened ${relpath} (${hash}) ------`)
-                .catch(ex => selectedItemLine.content = `Failed to open ${relpath}: ${ex} ------`)
-                .then(() => this.screen.render());
-            
+            } else {
+                // item.content == cmd_cancel, pressed escape, etc
+            }
+
         });
         this.screen.key('q', function() {
             return this.destroy();
