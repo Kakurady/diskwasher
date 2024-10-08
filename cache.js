@@ -3,6 +3,7 @@
 const _store = Symbol();
 const _db = Symbol();
 const path = require('path');
+const sqlite3 = require('sqlite3');
 const sqlite = require('sqlite');
 
 const version = 1;
@@ -17,10 +18,9 @@ class DWCache {
         this.filename = filename;
         const migrationsPath = path.join(path.dirname(process.argv[1]), "migrations")
         /**@type {sqlite.Database} */
-        this[_db] = sqlite.open(filename, {cached: true})
-        .then(db=> db.exec("pragma journal_mode = wal;"))
-        .then(db => 
-            db.migrate({migrationsPath})
+        this[_db] = sqlite.open({filename, driver:sqlite3.cached.Database})
+        .then(db=>{db.exec("pragma journal_mode = wal;"); return db;})
+        .then(db => { db.migrate({migrationsPath}); return db;}
         );
     }
 
